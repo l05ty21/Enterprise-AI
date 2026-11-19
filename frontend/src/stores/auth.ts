@@ -2,7 +2,7 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import { authApi } from '@/api/auth'
-import type { CurrentUser, LoginPayload } from '@/types/user'
+import type { CurrentUser, LoginPayload, RegisterPayload } from '@/types/user'
 import { clearTokens, getAccessToken, getRefreshToken, setTokens } from '@/utils/token'
 
 export const useAuthStore = defineStore('auth', () => {
@@ -20,6 +20,14 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function login(payload: LoginPayload): Promise<void> {
     const { data } = await authApi.login(payload)
+    setTokens(data.access_token, data.refresh_token)
+    accessToken.value = data.access_token
+    await fetchMe()
+  }
+
+  /** 注册成功后后端直接返回令牌，这里沿用登录后的同一套状态初始化 */
+  async function register(payload: RegisterPayload): Promise<void> {
+    const { data } = await authApi.register(payload)
     setTokens(data.access_token, data.refresh_token)
     accessToken.value = data.access_token
     await fetchMe()
@@ -79,6 +87,7 @@ export const useAuthStore = defineStore('auth', () => {
     displayName,
     roles,
     login,
+    register,
     fetchMe,
     logout,
     reset,

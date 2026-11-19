@@ -64,7 +64,7 @@ async function handleSubmit(): Promise<void> {
           <li>云端 + 本地模型自由切换的 AI 网关</li>
           <li>知识库 RAG、工单、审批一体化协同</li>
         </ul>
-        <p class="brand-footer">第一阶段：基础框架 + 登录权限系统</p>
+        <p class="brand-footer">已上线：权限体系 · AI 模型网关 · 流式对话</p>
       </div>
     </section>
 
@@ -110,6 +110,11 @@ async function handleSubmit(): Promise<void> {
             登录
           </el-button>
         </el-form>
+
+        <div class="switch-line">
+          还没有账号？
+          <router-link to="/register" class="switch-link">立即注册</router-link>
+        </div>
       </div>
     </section>
   </div>
@@ -200,6 +205,22 @@ async function handleSubmit(): Promise<void> {
 .login-button {
   width: 100%;
   margin-top: 8px;
+}
+
+.switch-line {
+  margin-top: 20px;
+  font-size: 14px;
+  color: #909399;
+  text-align: center;
+}
+
+.switch-link {
+  color: #409eff;
+  text-decoration: none;
+}
+
+.switch-link:hover {
+  text-decoration: underline;
 }
 
 @media (max-width: 900px) {

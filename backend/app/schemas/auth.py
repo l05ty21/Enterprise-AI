@@ -21,6 +21,43 @@ class LogoutRequest(BaseModel):
     refresh_token: str | None = Field(default=None, description="可选，用于同时吊销刷新令牌")
 
 
+class RegisterRequest(BaseModel):
+    """企业自助注册：一次性创建企业 + 内置角色 + 该企业的管理员账号。"""
+
+    organization_name: str = Field(min_length=2, max_length=100, description="企业名称")
+    organization_code: str = Field(
+        min_length=2,
+        max_length=32,
+        pattern=r"^[a-z][a-z0-9_-]{1,31}$",
+        description="企业编码，小写字母开头，仅含小写字母/数字/下划线/连字符",
+    )
+    username: str = Field(
+        min_length=2,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9_]{2,64}$",
+        description="管理员用户名",
+    )
+    password: str = Field(min_length=8, max_length=128, description="登录密码")
+    real_name: str | None = Field(default=None, max_length=64)
+    email: EmailStr | None = None
+
+    @field_validator("organization_name", "username")
+    @classmethod
+    def _strip(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("password")
+    @classmethod
+    def _check_strength(cls, value: str) -> str:
+        has_letter = any(ch.isalpha() for ch in value)
+        has_digit = any(ch.isdigit() for ch in value)
+        if not (has_letter and has_digit):
+            raise ValueError("密码必须同时包含字母和数字")
+        if len(value) < settings.PASSWORD_MIN_LENGTH:
+            raise ValueError(f"密码长度不能少于 {settings.PASSWORD_MIN_LENGTH} 位")
+        return value
+
+
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str

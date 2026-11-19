@@ -51,6 +51,10 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173"]
     )
 
+    # ---------- 注册 ----------
+    # 是否允许企业自助注册；如需邀请制可置为 false
+    ALLOW_SELF_REGISTRATION: bool = True
+
     # ---------- 初始化数据 ----------
     FIRST_ORG_NAME: str = "示例科技有限公司"
     FIRST_ORG_CODE: str = "demo"
