@@ -20,6 +20,22 @@ const form = reactive({
   password: '',
 })
 
+// 演示账号：课程演示用。上线给真实用户前把 SHOW_DEMO_ACCOUNT 改为 false 即可隐藏。
+const SHOW_DEMO_ACCOUNT = true
+const DEMO_ACCOUNT = {
+  organization_code: 'demo',
+  username: 'admin',
+  password: 'Admin@123456',
+}
+
+function fillDemo(): void {
+  form.organization_code = DEMO_ACCOUNT.organization_code
+  form.username = DEMO_ACCOUNT.username
+  form.password = DEMO_ACCOUNT.password
+  formRef.value?.clearValidate()
+  ElMessage.success('已填入演示账号，直接点登录即可')
+}
+
 const rules: FormRules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
@@ -114,6 +130,18 @@ async function handleSubmit(): Promise<void> {
         <div class="switch-line">
           还没有账号？
           <router-link to="/register" class="switch-link">立即注册</router-link>
+        </div>
+
+        <div v-if="SHOW_DEMO_ACCOUNT" class="demo-box">
+          <span class="demo-label">演示账号</span>
+          <span class="demo-values">
+            <code>{{ DEMO_ACCOUNT.organization_code }}</code>
+            <span class="demo-sep">/</span>
+            <code>{{ DEMO_ACCOUNT.username }}</code>
+            <span class="demo-sep">/</span>
+            <code>{{ DEMO_ACCOUNT.password }}</code>
+          </span>
+          <button type="button" class="demo-fill" @click="fillDemo">一键填充</button>
         </div>
       </div>
     </section>
@@ -220,6 +248,58 @@ async function handleSubmit(): Promise<void> {
 }
 
 .switch-link:hover {
+  text-decoration: underline;
+}
+
+.demo-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 24px;
+  padding: 10px 14px;
+  font-size: 13px;
+  background: #f5f9ff;
+  border: 1px dashed #c6e2ff;
+  border-radius: 10px;
+}
+
+.demo-label {
+  flex: none;
+  color: #606266;
+}
+
+.demo-values {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.demo-values code {
+  padding: 2px 7px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: #409eff;
+  background: #fff;
+  border-radius: 5px;
+}
+
+.demo-sep {
+  color: #c0c4cc;
+}
+
+.demo-fill {
+  flex: none;
+  margin-left: auto;
+  padding: 0;
+  font-size: 13px;
+  color: #409eff;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.demo-fill:hover {
   text-decoration: underline;
 }
 
