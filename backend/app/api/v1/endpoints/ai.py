@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import StreamingResponse
 
 from app.api.deps import CurrentUser, DBDep, require_permissions
-from app.core.exceptions import AppError
+from app.core.exceptions import AppError, PermissionDenied
 from app.schemas.ai import (
     AIModelConfigCreate,
     AIModelConfigRead,
@@ -80,15 +80,23 @@ async def delete_model_config(
     return MessageResponse(message="模型配置已删除")
 
 
+def _ensure_rag_permission(current: CurrentUser, payload: ChatRequest) -> None:
+    """启用知识库检索时，额外要求知识库读权限，避免绕过知识库接口直接读片段。"""
+    if payload.knowledge_base_ids is not None and not current.has("knowledge:read"):
+        raise PermissionDenied("缺少权限: knowledge:read")
+
+
 @router.post("/chat", response_model=ChatResponse, summary="对话（非流式）")
 async def chat(
     payload: ChatRequest, current: ChatAI, db: DBDep
 ) -> ChatResponse:
+    _ensure_rag_permission(current, payload)
     return await AIService(db).chat(current.organization_id, current.id, payload)
 
 
 @router.post("/chat/stream", summary="对话（流式 SSE）")
 async def chat_stream(payload: ChatRequest, current: ChatAI, db: DBDep):
+    _ensure_rag_permission(current, payload)
     service = AIService(db)
     # 检索在流开始前完成，先把引用推给前端，再逐字输出
     token_stream, citations = await service.stream_chat(

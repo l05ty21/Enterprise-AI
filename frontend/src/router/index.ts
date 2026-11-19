@@ -42,6 +42,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'AI 助手', icon: 'ChatDotRound', permission: 'ai:chat' },
       },
       {
+        path: 'knowledge',
+        name: 'Knowledge',
+        component: () => import('@/views/KnowledgeView.vue'),
+        meta: { title: '知识库', icon: 'Files', permission: 'knowledge:read' },
+      },
+      {
         path: 'users',
         name: 'Users',
         component: () => import('@/views/UserListView.vue'),

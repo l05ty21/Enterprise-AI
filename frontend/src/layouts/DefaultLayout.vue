@@ -6,6 +6,7 @@ import {
   ArrowDown,
   ChatDotRound,
   Expand,
+  Files,
   Fold,
   Lock,
   Odometer,
@@ -104,9 +105,9 @@ function handleCommand(command: string): void {
           <el-menu-item index="/ai-models">AI 模型配置</el-menu-item>
         </el-sub-menu>
 
-        <el-menu-item disabled index="/knowledge">
-          <el-icon><Lock /></el-icon>
-          <template #title>知识库（规划中）</template>
+        <el-menu-item v-if="auth.has('knowledge:read')" index="/knowledge">
+          <el-icon><Files /></el-icon>
+          <template #title>知识库</template>
         </el-menu-item>
         <el-menu-item disabled index="/tickets">
           <el-icon><Lock /></el-icon>

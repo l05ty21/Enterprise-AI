@@ -1,16 +1,25 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { ChatDotRound, Delete, Promotion, VideoPause } from '@element-plus/icons-vue'
+import {
+  ChatDotRound,
+  Delete,
+  Files,
+  Promotion,
+  VideoPause,
+} from '@element-plus/icons-vue'
 
 import { aiApi } from '@/api/ai'
+import { knowledgeApi } from '@/api/knowledge'
 import { useAuthStore } from '@/stores/auth'
-import type { ChatPayload } from '@/types/ai'
+import type { ChatPayload, Citation } from '@/types/ai'
+import type { KnowledgeBase } from '@/types/knowledge'
 
 interface Bubble {
   role: 'user' | 'assistant'
   content: string
   error?: boolean
+  citations?: Citation[]
 }
 
 const auth = useAuthStore()
@@ -23,6 +32,12 @@ const modelName = ref('')
 const listEl = ref<HTMLElement | null>(null)
 let controller: AbortController | null = null
 let startedAt = 0
+
+// 知识库检索：开启后默认全企业知识库，也可以指定某几个
+const canUseKnowledge = computed(() => auth.has('knowledge:read'))
+const kbEnabled = ref(false)
+const kbList = ref<KnowledgeBase[]>([])
+const selectedKbs = ref<number[]>([])
 
 const suggestions = [
   '用三句话介绍一下这个平台的能力',
@@ -64,6 +79,7 @@ async function send(text?: string): Promise<void> {
       .filter((item) => item.role === 'user' && item.content)
       .map((item) => ({ role: 'user' as const, content: item.content })),
     system_prompt: '你是智企协同平台的企业助手，回答简洁、专业，使用简体中文。',
+    knowledge_base_ids: kbEnabled.value ? [...selectedKbs.value] : null,
   }
 
   startedAt = performance.now()
@@ -75,6 +91,9 @@ async function send(text?: string): Promise<void> {
       {
         onDelta(delta) {
           target.content += delta
+        },
+        onCitations(list) {
+          target.citations = list
         },
         onError(message) {
           target.error = true
@@ -117,6 +136,16 @@ function onKeydown(event: KeyboardEvent): void {
 }
 
 onBeforeUnmount(() => controller?.abort())
+
+onMounted(async () => {
+  if (!canUseKnowledge.value) return
+  try {
+    const { data } = await knowledgeApi.listBases()
+    kbList.value = data
+  } catch {
+    /* 知识库加载失败不影响普通对话 */
+  }
+})
 </script>
 
 <template>
@@ -130,6 +159,33 @@ onBeforeUnmount(() => controller?.abort())
             <el-tag size="small" type="success" effect="plain">{{ modelName || 'qwen-plus' }}</el-tag>
           </div>
           <div class="chat-actions">
+            <template v-if="canUseKnowledge">
+              <el-switch
+                v-model="kbEnabled"
+                size="small"
+                active-text="知识库"
+                inline-prompt
+                style="--el-switch-on-color: #13ce66"
+              />
+              <el-select
+                v-if="kbEnabled"
+                v-model="selectedKbs"
+                multiple
+                collapse-tags
+                collapse-tags-tooltip
+                clearable
+                size="small"
+                placeholder="全部知识库"
+                class="kb-select"
+              >
+                <el-option
+                  v-for="kb in kbList"
+                  :key="kb.id"
+                  :label="kb.name"
+                  :value="kb.id"
+                />
+              </el-select>
+            </template>
             <span v-if="elapsedMs" class="elapsed">{{ (elapsedMs / 1000).toFixed(1) }}s</span>
             <el-button :icon="Delete" text :disabled="isEmpty" @click="clearAll">清空</el-button>
           </div>
@@ -158,6 +214,22 @@ onBeforeUnmount(() => controller?.abort())
           <div class="bubble" :class="{ error: item.error }">
             <span v-if="item.content">{{ item.content }}</span>
             <span v-else class="typing">思考中…</span>
+            <div v-if="item.citations && item.citations.length" class="citations">
+              <div class="citations-title">
+                <el-icon><Files /></el-icon>
+                参考了 {{ item.citations.length }} 个片段
+              </div>
+              <div
+                v-for="(cite, i) in item.citations"
+                :key="cite.chunk_id"
+                class="citation"
+              >
+                <span class="citation-index">[{{ i + 1 }}]</span>
+                <span class="citation-file">{{ cite.filename }}</span>
+                <span class="citation-score">{{ (cite.score * 100).toFixed(0) }}%</span>
+                <div class="citation-snippet">{{ cite.snippet }}</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -298,6 +370,54 @@ onBeforeUnmount(() => controller?.abort())
 
 .typing {
   color: #909399;
+}
+
+.kb-select {
+  width: 190px;
+}
+
+.citations {
+  padding-top: 10px;
+  margin-top: 10px;
+  border-top: 1px dashed #dcdfe6;
+}
+
+.citations-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: #909399;
+}
+
+.citation {
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  background: #fff;
+  border-left: 3px solid #67c23a;
+  border-radius: 4px;
+}
+
+.citation-index {
+  font-weight: 600;
+  color: #67c23a;
+}
+
+.citation-file {
+  margin: 0 8px;
+  color: #303133;
+}
+
+.citation-score {
+  color: #909399;
+}
+
+.citation-snippet {
+  margin-top: 3px;
+  color: #606266;
+  line-height: 1.6;
 }
 
 .chat-input {

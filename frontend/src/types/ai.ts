@@ -1,5 +1,9 @@
 export type ChatRole = 'system' | 'user' | 'assistant'
 
+import type { Citation } from './knowledge'
+
+export type { Citation }
+
 export interface ChatMessageItem {
   role: ChatRole
   content: string
@@ -10,6 +14,8 @@ export interface ChatPayload {
   system_prompt?: string
   temperature?: number
   max_tokens?: number
+  /** null/不传=不检索；[]=全企业知识库；[1,2]=指定知识库 */
+  knowledge_base_ids?: number[] | null
 }
 
 export interface ChatResponse {
@@ -18,10 +24,12 @@ export interface ChatResponse {
   input_tokens: number
   output_tokens: number
   latency_ms: number
+  citations?: Citation[]
 }
 
 export interface StreamHandlers {
   onDelta: (text: string) => void
+  onCitations?: (citations: Citation[]) => void
   onDone?: (meta?: { model?: string }) => void
   onError?: (message: string) => void
 }

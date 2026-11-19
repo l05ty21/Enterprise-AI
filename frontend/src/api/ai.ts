@@ -3,6 +3,7 @@ import { apiClient } from './client'
 import type {
   ChatPayload,
   ChatResponse,
+  Citation,
   ModelConfig,
   ModelConfigPayload,
   ProviderOption,
@@ -98,10 +99,18 @@ export const aiApi = {
           return
         }
         try {
-          const data = JSON.parse(raw) as { delta?: string; error?: string }
+          const data = JSON.parse(raw) as {
+            delta?: string
+            error?: string
+            citations?: Citation[]
+          }
           if (data.error) {
             handlers.onError?.(data.error)
             return
+          }
+          if (data.citations) {
+            handlers.onCitations?.(data.citations)
+            continue
           }
           if (data.delta) {
             handlers.onDelta(data.delta)
