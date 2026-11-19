@@ -54,6 +54,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '部门管理', icon: 'OfficeBuilding', permission: 'department:read' },
       },
       {
+        path: 'ai-models',
+        name: 'AiModels',
+        component: () => import('@/views/AiModelConfigView.vue'),
+        meta: { title: 'AI 模型配置', icon: 'Setting', permission: 'system:config' },
+      },
+      {
         path: 'profile',
         name: 'Profile',
         component: () => import('@/views/ProfileView.vue'),

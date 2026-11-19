@@ -15,9 +15,9 @@ const formRef = ref<FormInstance>()
 const loading = ref(false)
 
 const form = reactive({
-  organization_code: 'demo',
-  username: 'admin',
-  password: 'Admin@123456',
+  organization_code: '',
+  username: '',
+  password: '',
 })
 
 const rules: FormRules = {
@@ -110,15 +110,6 @@ async function handleSubmit(): Promise<void> {
             登录
           </el-button>
         </el-form>
-
-        <el-alert
-          class="demo-tip"
-          type="info"
-          :closable="false"
-          show-icon
-          title="演示账号"
-          description="企业编码 demo / 用户名 admin / 密码 Admin@123456（由种子脚本创建）"
-        />
       </div>
     </section>
   </div>
@@ -209,10 +200,6 @@ async function handleSubmit(): Promise<void> {
 .login-button {
   width: 100%;
   margin-top: 8px;
-}
-
-.demo-tip {
-  margin-top: 24px;
 }
 
 @media (max-width: 900px) {

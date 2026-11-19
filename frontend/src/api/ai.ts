@@ -1,11 +1,44 @@
 import { apiClient } from './client'
 
-import type { ChatPayload, ChatResponse, StreamHandlers } from '@/types/ai'
+import type {
+  ChatPayload,
+  ChatResponse,
+  ModelConfig,
+  ModelConfigPayload,
+  ProviderOption,
+  StreamHandlers,
+  UsageSummary,
+} from '@/types/ai'
+import type { MessageResponse } from '@/types/api'
 import { getAccessToken } from '@/utils/token'
 
 const baseURL = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 
 export const aiApi = {
+  // ---------------------------------------------------------------- 配置管理
+  providers() {
+    return apiClient.get<ProviderOption[]>('/ai/providers')
+  },
+
+  listModels() {
+    return apiClient.get<ModelConfig[]>('/ai/models')
+  },
+
+  createModel(payload: ModelConfigPayload) {
+    return apiClient.post<ModelConfig>('/ai/models', payload)
+  },
+
+  updateModel(id: number, payload: Partial<ModelConfigPayload>) {
+    return apiClient.put<ModelConfig>(`/ai/models/${id}`, payload)
+  },
+
+  deleteModel(id: number) {
+    return apiClient.delete<MessageResponse>(`/ai/models/${id}`)
+  },
+
+  usage(days = 7) {
+    return apiClient.get<UsageSummary>('/ai/usage', { params: { days } })
+  },
   /** 非流式对话，一次性返回完整结果 */
   chat(payload: ChatPayload) {
     return apiClient.post<ChatResponse>('/ai/chat', payload, { timeout: 120000 })

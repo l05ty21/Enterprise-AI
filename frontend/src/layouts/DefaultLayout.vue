@@ -29,6 +29,7 @@ const canUser = computed(() => auth.has('user:read'))
 const canRole = computed(() => auth.has('role:read'))
 const canDepartment = computed(() => auth.has('department:read'))
 const canOrganization = computed(() => canUser.value || canRole.value || canDepartment.value)
+const canSystem = computed(() => auth.has('system:config'))
 
 async function handleLogout(): Promise<void> {
   try {
@@ -93,6 +94,14 @@ function handleCommand(command: string): void {
           <el-menu-item v-if="canUser" index="/users">用户管理</el-menu-item>
           <el-menu-item v-if="canRole" index="/roles">角色权限</el-menu-item>
           <el-menu-item v-if="canDepartment" index="/departments">部门管理</el-menu-item>
+        </el-sub-menu>
+
+        <el-sub-menu v-if="canSystem" index="system">
+          <template #title>
+            <el-icon><Setting /></el-icon>
+            <span>系统设置</span>
+          </template>
+          <el-menu-item index="/ai-models">AI 模型配置</el-menu-item>
         </el-sub-menu>
 
         <el-menu-item disabled index="/knowledge">
