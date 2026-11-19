@@ -1,0 +1,119 @@
+name: enterprise-ai
+
+# 针对 2 vCPU / 1 GiB 内存的小规格实例精简过：
+#   - 只跑第一阶段 + 第二阶段（百炼走云端 API）必需的 4 个服务
+#   - 不启 Milvus / etcd / MinIO / Celery（第三阶段再开，那几个的常驻内存比整机还大）
+#   - MySQL 关掉 performance_schema、缓冲池压到 64M，省出约 200MB
+#   - 不挂载 backend/sql/init.sql：建表统一交给 alembic，避免两套 DDL 打架
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: ea-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请在 .env 里设置}
+      MYSQL_DATABASE: enterprise_ai
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+08:00
+      - --innodb-buffer-pool-size=64M
+      - --innodb-log-file-size=32M
+      - --performance-schema=OFF
+      - --max-connections=50
+      - --skip-name-resolve
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 40s
+    expose:
+      - "3306"
+
+  redis:
+    image: redis:7-alpine
+    container_name: ea-redis
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+      - --maxmemory
+      - 64mb
+      - --maxmemory-policy
+      - allkeys-lru
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+      args:
+        APT_MIRROR: ${APT_MIRROR:-deb.debian.org}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+    container_name: ea-backend
+    restart: unless-stopped
+    environment:
+      APP_ENV: prod
+      DEBUG: "false"
+      SECRET_KEY: ${SECRET_KEY:?请在 .env 里设置}
+      DATABASE_URL: mysql+asyncmy://root:${MYSQL_ROOT_PASSWORD}@mysql:3306/enterprise_ai?charset=utf8mb4
+      REDIS_URL: redis://redis:6379/0
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost}
+      FIRST_ORG_NAME: ${FIRST_ORG_NAME:-示例科技有限公司}
+      FIRST_ORG_CODE: ${FIRST_ORG_CODE:-demo}
+      FIRST_SUPERUSER_USERNAME: ${FIRST_SUPERUSER_USERNAME:-admin}
+      FIRST_SUPERUSER_PASSWORD: ${FIRST_SUPERUSER_PASSWORD:-Admin@123456}
+      FIRST_SUPERUSER_EMAIL: ${FIRST_SUPERUSER_EMAIL:-admin@example.com}
+      FIRST_SUPERUSER_REAL_NAME: ${FIRST_SUPERUSER_REAL_NAME:-系统管理员}
+      AI_DEFAULT_PROVIDER: ${AI_DEFAULT_PROVIDER:-bailian}
+      AI_DEFAULT_MODEL: ${AI_DEFAULT_MODEL:-qwen-plus}
+      AI_CLOUD_BASE_URL: ${AI_CLOUD_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      AI_CLOUD_API_KEY: ${AI_CLOUD_API_KEY:-}
+      AI_EMBEDDING_MODEL: ${AI_EMBEDDING_MODEL:-text-embedding-v3}
+      AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS:-60}
+      AI_MAX_RETRIES: ${AI_MAX_RETRIES:-2}
+      AI_MAX_TOKENS: ${AI_MAX_TOKENS:-2048}
+      AI_KEY_ENCRYPTION_KEY: ${AI_KEY_ENCRYPTION_KEY:-}
+      TZ: Asia/Shanghai
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    command: >
+      sh -c "alembic upgrade head &&
+             python -m app.db.seed &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1"
+    expose:
+      - "8000"
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
+    container_name: ea-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_started
+
+volumes:
+  mysql-data:
