@@ -1,0 +1,45 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# ---- 环境变量 / 密钥 ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ---- Node ----
+node_modules/
+dist/
+dist-ssr/
+*.local
+.vite/
+
+# ---- IDE ----
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# ---- 运行时产物 ----
+logs/
+*.log
+*.db
+*.sqlite3
+uploads/
+data/
+mysql-data/
+minio-data/
+milvus-data/
+etcd-data/
+redis-data/
