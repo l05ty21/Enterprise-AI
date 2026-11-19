@@ -117,6 +117,7 @@ cd backend
 - [架构设计](docs/architecture.md)
 - [数据库设计](docs/database.md)
 - [接口文档](docs/api.md)
+- [部署手册](docs/deploy.md) —— 阿里云 ECS 单机部署全流程
 - [后端说明](backend/README.md)
 - [前端说明](frontend/README.md)
 
