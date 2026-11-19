@@ -8,9 +8,12 @@ import { clearTokens, getAccessToken, getRefreshToken, setTokens } from '@/utils
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<CurrentUser | null>(null)
   const loading = ref(false)
+  // 登录态必须由响应式变量驱动：直接读 localStorage 的 computed 没有依赖，
+  // 会在首次求值后永久缓存，导致登录成功后守卫仍判定为未登录、跳回登录页。
+  const accessToken = ref<string | null>(getAccessToken())
 
   const permissionSet = computed(() => new Set(user.value?.permissions ?? []))
-  const isLoggedIn = computed(() => Boolean(getAccessToken()))
+  const isLoggedIn = computed(() => Boolean(accessToken.value))
   const isSuperuser = computed(() => user.value?.is_superuser ?? false)
   const displayName = computed(() => user.value?.real_name || user.value?.username || '未登录')
   const roles = computed(() => user.value?.roles ?? [])
@@ -18,17 +21,20 @@ export const useAuthStore = defineStore('auth', () => {
   async function login(payload: LoginPayload): Promise<void> {
     const { data } = await authApi.login(payload)
     setTokens(data.access_token, data.refresh_token)
+    accessToken.value = data.access_token
     await fetchMe()
   }
 
   async function fetchMe(): Promise<void> {
     if (!getAccessToken()) {
+      accessToken.value = null
       return
     }
     loading.value = true
     try {
       const { data } = await authApi.me()
       user.value = data
+      accessToken.value = getAccessToken()
     } finally {
       loading.value = false
     }
@@ -46,6 +52,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   function reset(): void {
     clearTokens()
+    accessToken.value = null
     user.value = null
   }
 
