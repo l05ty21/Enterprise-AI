@@ -12,8 +12,8 @@ import re
 
 from app.core.exceptions import BadRequestError
 
-CHUNK_SIZE = 500
-CHUNK_OVERLAP = 80
+CHUNK_SIZE = 300
+CHUNK_OVERLAP = 60
 MAX_FILE_BYTES = 20 * 1024 * 1024  # 20 MB
 
 SUPPORTED_EXTENSIONS = {".txt", ".md", ".csv", ".pdf", ".docx"}

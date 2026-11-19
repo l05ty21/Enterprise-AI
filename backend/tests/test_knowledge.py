@@ -268,6 +268,45 @@ async def test_chat_without_knowledge_base_has_no_citations(
     assert resp.json()["citations"] == []
 
 
+# ------------------------------------------------------------------ 混合检索
+def test_tokenize_and_keyword_score() -> None:
+    from app.ai.vector_store import keyword_score, tokenize
+
+    tokens = tokenize("住宿报销标准")
+    assert "住宿" in tokens and "报销" in tokens
+
+    q = tokenize("住宿报销")
+    assert keyword_score(q, "住宿费用：一线城市每晚不超过 500 元") > 0
+    assert keyword_score(q, "年假规定：入职满一年享有 5 天") == 0
+    # 完全匹配 > 部分匹配 > 不匹配
+    assert keyword_score(q, "住宿报销标准") > keyword_score(q, "住宿费用")
+
+
+async def test_hybrid_search_ranks_by_keyword_when_vectors_tie(
+    client, admin_headers, monkeypatch
+) -> None:
+    """向量完全相同时，排序应由关键词命中决定——这才是混合检索的意义。"""
+
+    async def flat_embed(session, *, organization_id: int, texts: list[str]):
+        return [[1.0, 1.0, 1.0] for _ in texts]
+
+    monkeypatch.setattr("app.ai.gateway.embed", flat_embed)
+
+    kb_id = await _create_kb(client, admin_headers)
+    await _upload(client, admin_headers, kb_id, "报销.txt", REIMBURSE)
+    await _upload(client, admin_headers, kb_id, "年假.txt", LEAVE)
+
+    resp = await client.post(
+        "/api/v1/knowledge-bases/search/query",
+        json={"query": "年假有几天", "kb_ids": [kb_id], "top_k": 2},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    hits = resp.json()
+    assert len(hits) == 2
+    assert hits[0]["filename"] == "年假.txt", "关键词命中更高的片段应排在前面"
+
+
 # ------------------------------------------------------------------ 联动删除
 async def test_delete_document_removes_chunks(
     client, admin_headers, session_factory, fake_embedding

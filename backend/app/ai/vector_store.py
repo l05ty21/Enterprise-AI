@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 import numpy as np
@@ -22,6 +23,9 @@ from app.models.knowledge import Document, DocumentChunk
 
 # 单次检索最多扫描的切片数，防止知识库变大后一次查爆内存
 MAX_SCAN_ROWS = 5000
+
+# 中文字符串与英文/数字串。中文按 2-gram 切，避免引入分词库
+_TOKEN_RE = re.compile(r"[\u4e00-\u9fff]+|[A-Za-z0-9]+")
 
 
 @dataclass(slots=True)
@@ -37,6 +41,31 @@ def encode_vector(vector: list[float]) -> bytes:
 
 def decode_vector(blob: bytes) -> np.ndarray:
     return np.frombuffer(blob, dtype=np.float32)
+
+
+def tokenize(text: str) -> set[str]:
+    """极简分词：中文取 2-gram，英文/数字取整词。
+
+    不引第三方分词库（jieba 会多几 MB 且要维护词典），
+    对「报销标准」「500 元」这类检索场景足够。
+    """
+    tokens: set[str] = set()
+    for match in _TOKEN_RE.finditer((text or "").lower()):
+        segment = match.group()
+        if segment.isascii():
+            tokens.add(segment)
+        elif len(segment) == 1:
+            tokens.add(segment)
+        else:
+            tokens.update(segment[i : i + 2] for i in range(len(segment) - 1))
+    return tokens
+
+
+def keyword_score(query_tokens: set[str], content: str) -> float:
+    """关键词覆盖率：查询词有多大比例出现在片段里。"""
+    if not query_tokens:
+        return 0.0
+    return len(query_tokens & tokenize(content)) / len(query_tokens)
 
 
 def _normalize(matrix: np.ndarray) -> np.ndarray:
@@ -56,10 +85,17 @@ class MySQLVectorStore:
         organization_id: int,
         query_vector: list[float],
         *,
+        query_text: str | None = None,
         kb_ids: list[int] | None = None,
         top_k: int = 5,
         min_score: float = 0.0,
+        vector_weight: float = 0.7,
     ) -> list[ScoredChunk]:
+        """混合检索：向量相似度 + 关键词覆盖率加权。
+
+        纯向量对「500 元」这类精确数字不够敏感，加一路关键词得分可以显著改善。
+        ``vector_weight`` 为 1 时退化为纯向量检索。
+        """
         stmt = (
             select(DocumentChunk, Document.filename)
             .join(Document, Document.id == DocumentChunk.document_id)
@@ -84,7 +120,21 @@ class MySQLVectorStore:
             # 换过 embedding 模型时维度会不一致，直接视为不可比
             return []
 
-        scores = _normalize(matrix) @ (query / (np.linalg.norm(query) or 1.0))
+        cosine = _normalize(matrix) @ (query / (np.linalg.norm(query) or 1.0))
+        # 余弦可能为负，截断到 [0,1] 后与关键词得分同量纲
+        vector_scores = np.clip(cosine, 0.0, 1.0)
+
+        weight = min(max(vector_weight, 0.0), 1.0)
+        if query_text and weight < 1.0:
+            query_tokens = tokenize(query_text)
+            lexical = np.array(
+                [keyword_score(query_tokens, row[0].content) for row in rows],
+                dtype=np.float32,
+            )
+            scores = weight * vector_scores + (1.0 - weight) * lexical
+        else:
+            scores = vector_scores
+
         order = np.argsort(scores)[::-1][:top_k]
 
         results: list[ScoredChunk] = []

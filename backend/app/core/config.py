@@ -84,6 +84,8 @@ class Settings(BaseSettings):
     # 召回条数与相似度下限：低于阈值的内容不塞进提示词，避免污染答案
     RAG_TOP_K: int = 5
     RAG_MIN_SCORE: float = 0.2
+    # 混合检索里向量得分的权重（其余权重给关键词覆盖率）；1.0 = 退化为纯向量检索
+    RAG_VECTOR_WEIGHT: float = 0.7
     # 上传文件落盘目录（容器内需挂载 volume，否则重建即丢）
     UPLOAD_DIR: str = "data/uploads"
 

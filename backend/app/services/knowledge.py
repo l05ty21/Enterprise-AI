@@ -258,9 +258,11 @@ class KnowledgeService:
         hits = await self.vectors.search(
             organization_id,
             vector,
+            query_text=query,
             kb_ids=kb_ids,
             top_k=top_k or settings.RAG_TOP_K,
             min_score=settings.RAG_MIN_SCORE,
+            vector_weight=settings.RAG_VECTOR_WEIGHT,
         )
         return [
             SearchHit(
