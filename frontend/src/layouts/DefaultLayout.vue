@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ArrowDown,
+  ChatDotRound,
   Expand,
   Fold,
   Lock,
@@ -77,6 +78,11 @@ function handleCommand(command: string): void {
         <el-menu-item v-if="auth.has('menu:dashboard')" index="/dashboard">
           <el-icon><Odometer /></el-icon>
           <template #title>工作台</template>
+        </el-menu-item>
+
+        <el-menu-item v-if="auth.has('ai:chat')" index="/ai-chat">
+          <el-icon><ChatDotRound /></el-icon>
+          <template #title>AI 助手</template>
         </el-menu-item>
 
         <el-sub-menu v-if="canOrganization" index="organization">

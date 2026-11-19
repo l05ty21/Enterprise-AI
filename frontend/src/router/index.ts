@@ -30,6 +30,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '工作台', icon: 'Odometer', permission: 'menu:dashboard' },
       },
       {
+        path: 'ai-chat',
+        name: 'AiChat',
+        component: () => import('@/views/AiChatView.vue'),
+        meta: { title: 'AI 助手', icon: 'ChatDotRound', permission: 'ai:chat' },
+      },
+      {
         path: 'users',
         name: 'Users',
         component: () => import('@/views/UserListView.vue'),
