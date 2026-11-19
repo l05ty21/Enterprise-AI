@@ -88,7 +88,15 @@ services:
       AI_MAX_RETRIES: ${AI_MAX_RETRIES:-2}
       AI_MAX_TOKENS: ${AI_MAX_TOKENS:-2048}
       AI_KEY_ENCRYPTION_KEY: ${AI_KEY_ENCRYPTION_KEY:-}
+      # 知识库：上传文件落盘目录 + 召回参数
+      UPLOAD_DIR: ${UPLOAD_DIR:-/app/data/uploads}
+      RAG_TOP_K: ${RAG_TOP_K:-5}
+      RAG_MIN_SCORE: ${RAG_MIN_SCORE:-0.2}
+      EMBEDDING_BATCH_SIZE: ${EMBEDDING_BATCH_SIZE:-10}
       TZ: Asia/Shanghai
+    volumes:
+      # 知识库原始文件必须持久化，否则容器重建后 file_path 全部失效
+      - uploads-data:/app/data
     depends_on:
       mysql:
         condition: service_healthy
@@ -117,3 +125,4 @@ services:
 
 volumes:
   mysql-data:
+  uploads-data:

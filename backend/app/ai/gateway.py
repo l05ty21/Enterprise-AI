@@ -215,7 +215,15 @@ async def stream_chat(
 async def embed(
     session: AsyncSession, *, organization_id: int, texts: list[str]
 ) -> list[list[float]]:
+    """批量向量化。按 EMBEDDING_BATCH_SIZE 分批，避免单次请求超出厂商上限。"""
+    if not texts:
+        return []
     config_settings, _ = await resolve_settings(
         session, organization_id, model_type="embedding"
     )
-    return await build_provider(config_settings).embed(texts)
+    provider = build_provider(config_settings)
+    batch_size = max(settings.EMBEDDING_BATCH_SIZE, 1)
+    vectors: list[list[float]] = []
+    for start in range(0, len(texts), batch_size):
+        vectors.extend(await provider.embed(texts[start : start + batch_size]))
+    return vectors

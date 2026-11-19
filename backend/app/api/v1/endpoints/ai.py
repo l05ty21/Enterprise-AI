@@ -90,12 +90,20 @@ async def chat(
 @router.post("/chat/stream", summary="对话（流式 SSE）")
 async def chat_stream(payload: ChatRequest, current: ChatAI, db: DBDep):
     service = AIService(db)
+    # 检索在流开始前完成，先把引用推给前端，再逐字输出
+    token_stream, citations = await service.stream_chat(
+        current.organization_id, current.id, payload
+    )
 
     async def event_source():
         try:
-            async for text in service.stream_chat(
-                current.organization_id, current.id, payload
-            ):
+            if citations:
+                payload_json = json.dumps(
+                    {"citations": [item.model_dump() for item in citations]},
+                    ensure_ascii=False,
+                )
+                yield f"data: {payload_json}\n\n"
+            async for text in token_stream:
                 yield f"data: {json.dumps({'delta': text}, ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"
         except AppError as exc:

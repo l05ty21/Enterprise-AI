@@ -78,6 +78,15 @@ class Settings(BaseSettings):
     # 企业级 API Key 的加密密钥；留空则用 SECRET_KEY 派生（生产建议独立配置）
     AI_KEY_ENCRYPTION_KEY: str | None = None
 
+    # ---------- 知识库 / RAG ----------
+    # 每次送去向量化的切片数（百炼 embedding 接口对单次条数有上限，必须分批）
+    EMBEDDING_BATCH_SIZE: int = 10
+    # 召回条数与相似度下限：低于阈值的内容不塞进提示词，避免污染答案
+    RAG_TOP_K: int = 5
+    RAG_MIN_SCORE: float = 0.2
+    # 上传文件落盘目录（容器内需挂载 volume，否则重建即丢）
+    UPLOAD_DIR: str = "data/uploads"
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def _split_origins(cls, value: object) -> object:

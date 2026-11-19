@@ -1,6 +1,15 @@
 from __future__ import annotations
 
-from sqlalchemy import ForeignKey, Index, Integer, JSON, SmallInteger, String, UniqueConstraint
+from sqlalchemy import (
+    ForeignKey,
+    Index,
+    Integer,
+    JSON,
+    LargeBinary,
+    SmallInteger,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, CreatedAtMixin
@@ -60,7 +69,12 @@ class Document(Base, CreatedAtMixin):
 
 
 class DocumentChunk(Base, CreatedAtMixin):
-    """文档切片元数据；向量本体存放在 Milvus，这里只保存定位信息。"""
+    """文档切片。
+
+    向量本体默认存在本表的 ``embedding`` 列（float32 二进制），
+    由 ``app.ai.vector_store.MySQLVectorStore`` 负责写入与检索；
+    将来接入 Milvus 时可以改用 ``vector_id`` 指向外部集合。
+    """
 
     __tablename__ = "document_chunks"
 
@@ -76,10 +90,14 @@ class DocumentChunk(Base, CreatedAtMixin):
     vector_id: Mapped[str] = mapped_column(String(128), nullable=False)
     collection_name: Mapped[str] = mapped_column(String(128), nullable=False)
     embedding_model: Mapped[str | None] = mapped_column(String(128))
+    # 向量：float32 小端字节串，维度另有记录，避免查询时反复推断
+    embedding: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    embedding_dim: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # 列名必须是 metadata，用 chunk_metadata 作为 Python 属性名避开 SQLAlchemy 保留字
     chunk_metadata: Mapped[dict | None] = mapped_column("metadata", JSON, nullable=True)
 
     __table_args__ = (
         UniqueConstraint("document_id", "chunk_index", name="uk_document_chunk"),
         UniqueConstraint("collection_name", "vector_id", name="uk_vector_id"),
+        Index("idx_chunk_doc", "document_id"),
     )

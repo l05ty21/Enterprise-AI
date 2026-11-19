@@ -22,6 +22,8 @@ from app.schemas.ai import (
     ChatResponse,
     ProviderOption,
 )
+from app.schemas.knowledge import Citation
+from app.services.knowledge import KnowledgeService
 
 PROVIDER_LABELS: list[tuple[str, str, str, bool]] = [
     ("bailian", "阿里云百炼", "qwen-plus", True),
@@ -166,10 +168,46 @@ class AIService:
             raise BadRequestError("消息不能为空")
         return messages
 
+    RAG_PROMPT = (
+        "以下是企业知识库中检索到的参考资料，请优先依据这些内容回答；"
+        "如果资料不足以回答，请明确说明「知识库中没有找到相关内容」，不要编造。\n"
+        "回答中可以用 [1] [2] 这样的编号标注引用来源。\n\n"
+    )
+
+    async def _with_rag(
+        self, organization_id: int, payload: ChatRequest
+    ) -> tuple[list[dict[str, Any]], list[Citation]]:
+        """按需做一次向量检索，把命中的片段拼到 system 提示词里。"""
+        messages = self._build_messages(payload)
+        if payload.knowledge_base_ids is None:
+            return messages, []
+
+        question = next(
+            (
+                item.content
+                for item in reversed(payload.messages)
+                if item.role == "user"
+            ),
+            "",
+        )
+        if not question:
+            return messages, []
+
+        context, citations = await KnowledgeService(self.session).build_context(
+            organization_id,
+            question,
+            kb_ids=payload.knowledge_base_ids or None,
+        )
+        if context:
+            messages.insert(
+                0, {"role": "system", "content": self.RAG_PROMPT + context}
+            )
+        return messages, citations
+
     async def chat(
         self, organization_id: int, user_id: int, payload: ChatRequest
     ) -> ChatResponse:
-        messages = self._build_messages(payload)
+        messages, citations = await self._with_rag(organization_id, payload)
         started_at = time.perf_counter()
         result = await gateway.chat(
             self.session,
@@ -187,24 +225,30 @@ class AIService:
             input_tokens=result.input_tokens,
             output_tokens=result.output_tokens,
             latency_ms=int((time.perf_counter() - started_at) * 1000),
+            citations=citations,
         )
 
     async def stream_chat(
         self, organization_id: int, user_id: int, payload: ChatRequest
-    ) -> AsyncIterator[str]:
-        messages = self._build_messages(payload)
-        async for text in gateway.stream_chat(
-            self.session,
-            organization_id=organization_id,
-            user_id=user_id,
-            messages=messages,
-            config_id=payload.model_config_id,
-            temperature=payload.temperature,
-            max_tokens=payload.max_tokens,
-        ):
-            yield text
-        # 流正常结束后落库用量
-        await self.session.commit()
+    ) -> tuple[AsyncIterator[str], list[Citation]]:
+        """返回 (增量文本流, 引用列表)。检索在流开始前完成，引用可先推给前端。"""
+        messages, citations = await self._with_rag(organization_id, payload)
+
+        async def token_stream() -> AsyncIterator[str]:
+            async for text in gateway.stream_chat(
+                self.session,
+                organization_id=organization_id,
+                user_id=user_id,
+                messages=messages,
+                config_id=payload.model_config_id,
+                temperature=payload.temperature,
+                max_tokens=payload.max_tokens,
+            ):
+                yield text
+            # 流正常结束后落库用量
+            await self.session.commit()
+
+        return token_stream(), citations
 
     # ---------------------------------------------------------------- 用量
     async def usage_summary(self, organization_id: int, days: int = 7) -> AIUsageSummary:

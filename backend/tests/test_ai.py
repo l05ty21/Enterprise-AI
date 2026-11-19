@@ -236,15 +236,14 @@ async def test_stream_chat_yields_and_logs(
             seeded.org_id,
             AIModelConfigCreate(model_name="qwen-plus", provider="bailian", is_default=True),
         )
-        chunks = [
-            chunk
-            async for chunk in service.stream_chat(
-                seeded.org_id,
-                seeded.admin_id,
-                ChatRequest(messages=[ChatMessageIn(role="user", content="hi")]),
-            )
-        ]
+        stream, citations = await service.stream_chat(
+            seeded.org_id,
+            seeded.admin_id,
+            ChatRequest(messages=[ChatMessageIn(role="user", content="hi")]),
+        )
+        chunks = [chunk async for chunk in stream]
     assert "".join(chunks) == "你好"
+    assert citations == []
 
     async with session_factory() as session:
         logs = list(await session.scalars(select(AIUsageLog)))

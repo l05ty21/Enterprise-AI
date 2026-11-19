@@ -5,6 +5,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.knowledge import Citation
+
 ModelType = Literal["llm", "embedding", "rerank"]
 MessageRole = Literal["system", "user", "assistant", "tool"]
 
@@ -76,6 +78,10 @@ class ChatRequest(BaseModel):
     system_prompt: str | None = Field(default=None, max_length=8000)
     temperature: float | None = Field(default=None, ge=0, le=2)
     max_tokens: int | None = Field(default=None, ge=1, le=8192)
+    knowledge_base_ids: list[int] | None = Field(
+        default=None,
+        description="启用知识库检索：null=不检索，[]=全企业知识库，[1,2]=指定知识库",
+    )
 
 
 class ChatResponse(BaseModel):
@@ -84,6 +90,9 @@ class ChatResponse(BaseModel):
     input_tokens: int = 0
     output_tokens: int = 0
     latency_ms: int = 0
+    citations: list[Citation] = Field(
+        default_factory=list, description="知识库回答引用的来源片段"
+    )
 
 
 # ---------------------------------------------------------------- 用量
