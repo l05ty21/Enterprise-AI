@@ -204,6 +204,45 @@ docker compose -f docker-compose.app.yml up -d backend
 
 ---
 
+## 7.5 自动部署（Push 即上线）
+
+服务器上启用 systemd 定时器后，**只要把代码推到 `main` 分支，2 分钟内自动上线**。
+
+工作方式：
+
+1. 每 2 分钟 `git fetch origin main`，比对本地与远端 SHA
+2. 有差异 → 按变更路径决定只重建 `backend` 还是 `frontend`（纯文档改动不构建）
+3. 部署前把当前镜像打 `:prev` 标签
+4. `up -d` 后轮询 `/api/v1/health`，**60 秒内不健康就自动回滚代码和镜像**
+5. `flock` 防止定时器在上一次未结束时重复触发
+6. 全部过程写入 `/var/log/ea-deploy.log`
+
+安装（服务器上执行一次）：
+
+```bash
+cd /opt/enterprise-ai
+chmod +x deploy/deploy.sh
+cp deploy/systemd/ea-deploy.service deploy/systemd/ea-deploy.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now ea-deploy.timer
+systemctl list-timers ea-deploy.timer
+```
+
+常用命令：
+
+```bash
+systemctl start ea-deploy.service        # 立刻手动跑一次，不等 2 分钟
+systemctl status ea-deploy.timer         # 定时器状态
+journalctl -u ea-deploy.service -n 50    # 服务侧日志
+tail -f /var/log/ea-deploy.log           # 部署明细
+systemctl disable --now ea-deploy.timer  # 关掉自动部署
+```
+
+> 开启后 `main` 的每次推送都会直接上线。开发中可以先把改动推到别的分支，
+> 验证没问题再合并到 `main`。
+
+---
+
 ## 8. 常见问题
 
 | 现象 | 原因 | 处理 |
