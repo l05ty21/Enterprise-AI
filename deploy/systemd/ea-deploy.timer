@@ -2,9 +2,11 @@
 Description=每 2 分钟检查一次 Gitee 是否有新提交
 
 [Timer]
+# 开机 3 分钟后先跑一次，之后按整 2 分钟触发（:00 :02 :04 ...）
 OnBootSec=3min
-OnUnitActiveSec=2min
-AccuracySec=30s
+OnCalendar=*:0/2
+AccuracySec=20s
+Persistent=true
 Unit=ea-deploy.service
 
 [Install]
