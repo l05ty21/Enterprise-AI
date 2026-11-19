@@ -1,0 +1,11 @@
+[Unit]
+Description=每 2 分钟检查一次 Gitee 是否有新提交
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=2min
+AccuracySec=30s
+Unit=ea-deploy.service
+
+[Install]
+WantedBy=timers.target

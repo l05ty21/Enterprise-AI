@@ -1,0 +1,11 @@
+[Unit]
+Description=Enterprise AI 自动部署（拉取 Gitee 新提交并重建）
+Documentation=file:/opt/enterprise-ai/docs/deploy.md
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/enterprise-ai/deploy/deploy.sh
+TimeoutStartSec=1800
+Nice=10
