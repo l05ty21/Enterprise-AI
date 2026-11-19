@@ -253,6 +253,9 @@ systemctl disable --now ea-deploy.timer  # 关掉自动部署
 | `alembic upgrade head` 报 table already exists | 同时挂载了 `init.sql` | 不要挂载 init.sql，建表只走 alembic |
 | 登录成功但不跳转（历史问题） | 前端 `isLoggedIn` 由 computed 直接读 localStorage，无响应式依赖导致永久缓存 | 已改为 ref 持有 token，见 `stores/auth.ts` |
 | MySQL 外键/事务不生效（本地 phpstudy） | 默认存储引擎是 MyISAM | `my.ini` 改 `default-storage-engine=InnoDB`，或 `SET GLOBAL` 立即生效 |
+| 上传文档报 `Free quota exhausted` / `AllocationQuota.FreeTierOnly` | 百炼账号处于「仅用免费额度」模式且向量化额度已用尽（对话额度是分开计的） | 控制台充值或关闭「仅使用免费额度」；也可换用其它厂商的 embedding（如硅基流动的 `BAAI/bge-m3`） |
+| 上传文档报「还没有可用的【向量】模型配置」 | 只在「AI 模型」里配了对话模型，没有配 `model_type=embedding` 的向量模型 | 在「系统设置 → AI 模型」新增一条类型为「向量（Embedding）」的配置，如 `text-embedding-v3` |
+| 知识库检索结果为空 | 相似度低于 `RAG_MIN_SCORE`（默认 0.2）被过滤 | 调低 `.env` 的 `RAG_MIN_SCORE`，或检查文档是否真的已 `ready` |
 
 ---
 

@@ -93,8 +93,14 @@ async def resolve_settings(
 
     fallback = _from_platform(model_type)
     if fallback is None:
+        label = {
+            "llm": "对话",
+            "embedding": "向量",
+            "rerank": "重排",
+        }.get(model_type, model_type)
         raise AINotConfiguredError(
-            "还没有可用的模型配置：请在「系统设置 → AI 模型」里添加，或在部署环境配置 AI_CLOUD_API_KEY"
+            f"还没有可用的【{label}】模型配置：请在「系统设置 → AI 模型」里新增一条 "
+            f"model_type={model_type} 的配置，或在部署环境配置 AI_CLOUD_API_KEY"
         )
     return fallback, None
 
