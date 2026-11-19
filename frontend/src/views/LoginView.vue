@@ -80,7 +80,7 @@ async function handleSubmit(): Promise<void> {
           <li>云端 + 本地模型自由切换的 AI 网关</li>
           <li>知识库 RAG、工单、审批一体化协同</li>
         </ul>
-        <p class="brand-footer">已上线：权限体系 · AI 模型网关 · 流式对话</p>
+        <p class="brand-footer">第二阶段已上线：AI 模型网关 · 流式对话</p>
       </div>
     </section>
 
