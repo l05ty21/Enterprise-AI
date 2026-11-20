@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Request, status
+from fastapi import APIRouter, Request
 
 from app.api.deps import DBDep, CurrentUserDep
 from app.schemas.auth import (
@@ -10,7 +10,6 @@ from app.schemas.auth import (
     PasswordChangeRequest,
     ProfileUpdateRequest,
     RefreshRequest,
-    RegisterRequest,
     TokenResponse,
 )
 from app.schemas.common import MessageResponse
@@ -30,21 +29,6 @@ def _client_ip(request: Request) -> str | None:
 async def login(payload: LoginRequest, request: Request, db: DBDep) -> TokenResponse:
     service = AuthService(db)
     return await service.login(
-        payload,
-        ip_address=_client_ip(request),
-        user_agent=request.headers.get("user-agent"),
-    )
-
-
-@router.post(
-    "/register",
-    response_model=TokenResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="企业自助注册",
-)
-async def register(payload: RegisterRequest, request: Request, db: DBDep) -> TokenResponse:
-    """公开接口：创建企业 + 内置角色 + 管理员账号，成功后直接返回登录令牌。"""
-    return await AuthService(db).register(
         payload,
         ip_address=_client_ip(request),
         user_agent=request.headers.get("user-agent"),

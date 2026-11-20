@@ -1,17 +1,11 @@
 from __future__ import annotations
 
 from jwt import PyJWTError
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.constants import (
-    ALL_PERMISSION_CODES,
-    PERMISSION_DEFINITIONS,
-    ROLE_PRESETS,
-    SUPER_ADMIN_ROLE_CODE,
-)
-from app.core.exceptions import AuthError, BadRequestError, ConflictError
+from app.core.constants import ALL_PERMISSION_CODES, SUPER_ADMIN_ROLE_CODE
+from app.core.exceptions import AuthError, BadRequestError
 from app.core.security import (
     TokenPayload,
     create_access_token,
@@ -21,8 +15,8 @@ from app.core.security import (
     verify_password,
 )
 from app.core.token_store import get_token_store
-from app.models.organization import Department, Organization
-from app.models.rbac import Permission, Role, RolePermission, UserRole
+from app.models.organization import Organization
+from app.models.rbac import Role
 from app.models.system import LoginLog
 from app.models.user import User
 from app.repositories.department import DepartmentRepository
@@ -33,7 +27,6 @@ from app.schemas.auth import (
     LoginRequest,
     PasswordChangeRequest,
     ProfileUpdateRequest,
-    RegisterRequest,
     RoleBrief,
     TokenResponse,
 )
@@ -89,109 +82,6 @@ class AuthService:
         return self._issue_tokens(user)
 
     # ------------------------------------------------------------------ 注册
-    async def register(
-        self,
-        payload: RegisterRequest,
-        *,
-        ip_address: str | None = None,
-        user_agent: str | None = None,
-    ) -> TokenResponse:
-        """企业自助注册：建企业 → 建内置角色 → 建管理员 → 直接签发令牌。
-
-        刻意不创建 ``super_admin`` 角色：那是平台级、可跨企业的身份，
-        自助注册出来的企业管理员只拿 ``org_admin``（本企业全权限）。
-        """
-        if not settings.ALLOW_SELF_REGISTRATION:
-            raise BadRequestError("系统未开放自助注册")
-
-        code = payload.organization_code.strip().lower()
-        if await self.orgs.get_by_code(code) is not None:
-            raise ConflictError("该企业编码已被占用，请换一个")
-
-        organization = Organization(
-            name=payload.organization_name.strip(), code=code, status=1
-        )
-        self.session.add(organization)
-        await self.session.flush()
-
-        permission_ids = await self._permission_ids()
-        roles = await self._provision_roles(organization.id, permission_ids)
-
-        root = Department(
-            organization_id=organization.id, name="总公司", parent_id=None
-        )
-        self.session.add(root)
-        await self.session.flush()
-
-        user = User(
-            organization_id=organization.id,
-            department_id=root.id,
-            username=payload.username.strip(),
-            password_hash=hash_password(payload.password),
-            real_name=(payload.real_name or payload.username).strip(),
-            email=str(payload.email) if payload.email else None,
-            status=1,
-        )
-        self.session.add(user)
-        await self.session.flush()
-
-        admin_role = roles.get("org_admin")
-        if admin_role is not None:
-            self.session.add(UserRole(user_id=user.id, role_id=admin_role.id))
-
-        await self._record_login(organization.id, user.id, "success", ip_address, user_agent)
-        await self.session.commit()
-        return self._issue_tokens(user)
-
-    async def _permission_ids(self) -> dict[str, int]:
-        """取全局权限点 id；缺失的定义按常量补齐（与种子脚本一致的幂等语义）。"""
-        rows = (await self.session.scalars(select(Permission))).all()
-        mapping = {item.code: item.id for item in rows}
-        missing = [
-            (code, name, kind)
-            for code, name, kind in PERMISSION_DEFINITIONS
-            if code not in mapping
-        ]
-        if not missing:
-            return mapping
-        for code, name, kind in missing:
-            self.session.add(Permission(name=name, code=code, type=kind))
-        await self.session.flush()
-        rows = (await self.session.scalars(select(Permission))).all()
-        return {item.code: item.id for item in rows}
-
-    async def _provision_roles(
-        self, organization_id: int, permission_ids: dict[str, int]
-    ) -> dict[str, Role]:
-        roles: dict[str, Role] = {}
-        for code, preset in ROLE_PRESETS.items():
-            if code == SUPER_ADMIN_ROLE_CODE:
-                continue
-            role = Role(
-                organization_id=organization_id,
-                name=preset["name"],
-                code=code,
-                description=preset["description"],
-            )
-            self.session.add(role)
-            await self.session.flush()
-            wanted = (
-                list(permission_ids.values())
-                if preset["permissions"] is None
-                else [
-                    permission_ids[item]
-                    for item in preset["permissions"]
-                    if item in permission_ids
-                ]
-            )
-            for permission_id in dict.fromkeys(wanted):
-                self.session.add(
-                    RolePermission(role_id=role.id, permission_id=permission_id)
-                )
-            roles[code] = role
-        await self.session.flush()
-        return roles
-
     async def _record_login(
         self,
         organization_id: int,

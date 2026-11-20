@@ -165,7 +165,8 @@ docker exec ea-mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -N enterprise_
 ```bash
 curl -s http://<公网IP>/api/v1/health
 curl -s -o /dev/null -w '%{http_code}\n' http://<公网IP>/login
-curl -s -o /dev/null -w '%{http_code}\n' http://<公网IP>/register
+# 自助注册已移除，这个接口应该返回 404
+curl -s -o /dev/null -w '%{http_code}\n' -X POST http://<公网IP>/api/v1/auth/register
 ```
 
 浏览器全流程（登录 → 跳转 → 对话 → 模型配置）可用 Playwright 自动跑一遍。
@@ -303,5 +304,5 @@ python deploy/deploy_frontend.py --skip-build    # 只上传现有 dist
 
 - [ ] 更换 SSH 弱密码 / 改用密钥登录并关闭密码认证
 - [ ] 修改 `admin` 的默认密码（`Admin@123456`）
-- [ ] 演示结束后设置 `ALLOW_SELF_REGISTRATION=false`，或给注册接口加 IP 限流
+- [x] 移除企业自助注册：账号只能由超级管理员/企业管理员在「用户管理」创建
 - [ ] 有域名后接入 HTTPS（阿里云免费证书 + nginx 443）

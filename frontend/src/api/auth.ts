@@ -6,18 +6,12 @@ import type {
   LoginPayload,
   PasswordPayload,
   ProfilePayload,
-  RegisterPayload,
   TokenPair,
 } from '@/types/user'
 
 export const authApi = {
   login(payload: LoginPayload) {
     return apiClient.post<TokenPair>('/auth/login', payload)
-  },
-
-  /** 企业自助注册：成功后直接返回令牌（免二次登录） */
-  register(payload: RegisterPayload) {
-    return apiClient.post<TokenPair>('/auth/register', payload)
   },
 
   logout(refreshToken?: string | null) {
