@@ -288,8 +288,8 @@ onMounted(loadStats)
 
           <el-divider />
           <p class="text-muted small">
-            已完成：权限体系、组织架构、知识库 RAG；AI 网关已接入云端模型，Ollama 待接入；
-            下一阶段：工单与审批。
+            已完成：权限体系、组织架构、知识库 RAG、工单与审批；AI 网关已接入云端模型，
+            Ollama 待接入；下一阶段：AI Agent（让 AI 直接查数据、建工单）。
           </p>
         </el-card>
       </el-col>
