@@ -74,7 +74,11 @@ class ApprovalService:
         )
         candidates = [i for i in candidates if i != user.id]
         if not candidates:
-            raise BadRequestError("当前企业还没有可用的审批人（需要「审批操作」权限）")
+            # 刻意不允许自己审批自己：单人企业需要先补一个审批人
+            raise BadRequestError(
+                "没有可用的审批人：审批不能由申请人自己完成，"
+                "请先在「用户管理」里添加一个具备「审批操作」权限的成员"
+            )
         return candidates[0]
 
     def _to_read(
