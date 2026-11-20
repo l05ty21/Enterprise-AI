@@ -74,8 +74,10 @@ const stageValues = computed<Record<string, number>>(() => ({
   组织: 100,
   'AI 网关': aiGatewayProgress.value,
   知识库: knowledgeProgress.value,
-  工单: 0,
-  审批: 0,
+  // 工单/审批核心流程已上线：提交、指派、流转、评论 / 发起、审批、驳回
+  // 还差附件上传与多级审批，所以按 80 计
+  工单: 80,
+  审批: 80,
 }))
 
 interface BarParam {
@@ -99,8 +101,8 @@ const chartOption = computed(() => ({
               stats.aiLocalModels ? '已接入' : '待接入'
             }`
           : '无权限查看模型配置',
-        工单: '规划中，尚未开发',
-        审批: '规划中，尚未开发',
+        工单: '提交 / 指派 / 流转 / 评论已上线，附件待补',
+        审批: '发起 / 通过 / 驳回已上线，多级审批待补',
       }
       const note = detail[item.name]
       return `${item.name}：${item.value}%${note ? `<br/><span style="color:#909399">${note}</span>` : ''}`
