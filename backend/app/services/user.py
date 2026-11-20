@@ -104,6 +104,9 @@ class UserService:
         if payload.role_ids:
             await self.users.set_roles(user.id, payload.role_ids)
         await self.session.commit()
+        # MySQL 没有 RETURNING，created_at / updated_at 是库端默认值，
+        # 提交后仍是「未加载」状态；不显式回读，序列化时会触发异步惰性查询（MissingGreenlet → 500）
+        await self.session.refresh(user)
         return (await self._to_reads([user]))[0]
 
     async def update_user(
