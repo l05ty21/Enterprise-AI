@@ -27,7 +27,6 @@ from __future__ import annotations
 import argparse
 import os
 import re
-import shutil
 import subprocess
 import sys
 import tarfile
@@ -60,11 +59,22 @@ def step(message: str) -> None:
     print(f"\n=== {message} ===", flush=True)
 
 
-def run_local(args: list[str], cwd: Path) -> None:
+def run_local(args: list[str], cwd: Path, env: dict[str, str] | None = None) -> None:
     print(f"$ {' '.join(args)}  (cwd={cwd})", flush=True)
-    completed = subprocess.run(args, cwd=str(cwd), shell=(os.name == "nt"))
+    completed = subprocess.run(args, cwd=str(cwd), shell=(os.name == "nt"), env=env)
     if completed.returncode != 0:
         raise SystemExit(f"命令失败（exit {completed.returncode}）: {' '.join(args)}")
+
+
+def build_env() -> dict[str, str]:
+    """esbuild 会往 %TEMP% 写临时文件，在 Windows 上常被杀软/索引占用导致
+    `remove ...: Access is denied`。固定到工程内的 .tmp 目录可绕开。"""
+    env = os.environ.copy()
+    tmp_dir = REPO_ROOT / ".tmp"
+    tmp_dir.mkdir(exist_ok=True)
+    env["TMP"] = str(tmp_dir)
+    env["TEMP"] = str(tmp_dir)
+    return env
 
 
 def build_frontend(skip_build: bool) -> str:
@@ -75,18 +85,19 @@ def build_frontend(skip_build: bool) -> str:
 
     if not (FRONTEND / "node_modules").is_dir():
         step("安装依赖（首次，约 1-2 分钟）")
-        run_local(["npm", "ci", "--no-audit", "--no-fund"], FRONTEND)
+        run_local(["npm", "ci", "--no-audit", "--no-fund"], FRONTEND, build_env())
 
     step("构建前端")
     started = time.time()
-    run_local(["npm", "run", "build"], FRONTEND)
+    run_local(["npm", "run", "build"], FRONTEND, build_env())
     return f"构建完成，用时 {time.time() - started:.1f}s"
 
 
 def make_tarball() -> Path:
     if not (DIST / "index.html").is_file():
         raise SystemExit("frontend/dist 不存在或为空")
-    archive = Path(tempfile.gettempdir()) / "fe-dist.tar.gz"
+    archive = REPO_ROOT / ".tmp" / "fe-dist.tar.gz"
+    archive.parent.mkdir(exist_ok=True)
     if archive.exists():
         archive.unlink()
     with tarfile.open(archive, "w:gz") as tar:
