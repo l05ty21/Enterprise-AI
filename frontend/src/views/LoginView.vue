@@ -42,7 +42,8 @@ const rules: FormRules = {
 }
 
 async function handleSubmit(): Promise<void> {
-  if (!formRef.value) {
+  if (!formRef.value || loading.value) {
+    // loading 期间重复点击/回车直接忽略，避免发出两次登录请求
     return
   }
   const valid = await formRef.value.validate().catch(() => false)
@@ -112,7 +113,6 @@ async function handleSubmit(): Promise<void> {
               placeholder="请输入密码"
               :prefix-icon="Lock"
               show-password
-              @keyup.enter="handleSubmit"
             />
           </el-form-item>
 
@@ -121,7 +121,6 @@ async function handleSubmit(): Promise<void> {
             class="login-button"
             :loading="loading"
             native-type="submit"
-            @click="handleSubmit"
           >
             登录
           </el-button>
