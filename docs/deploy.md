@@ -180,24 +180,19 @@ curl -s -o /dev/null -w '%{http_code}\n' http://<公网IP>/register
 
 ## 7. 日常更新
 
-```bash
-# 本地
-git add -A && git commit -m "..." && git push
+后端改动走 Git，前端改动走「本地构建 + 上传产物」，两者互不影响：
 
-# 服务器
-cd /opt/enterprise-ai
-git fetch origin && git reset --hard origin/main     # 服务器不做本地修改，直接对齐远端
-cd deploy
-docker compose -f docker-compose.app.yml up -d --build
+```bash
+# 后端（推上去 2 分钟内自动重建）
+git add backend/ && git commit -m "..." && git push
 ```
 
-`--build` 只会重建有变化的镜像，**MySQL 数据卷不受影响**。
+前端**不要**在服务器上构建（1 GiB 内存会被 `vite build` 打爆，见 7.6）：
 
-只想重建某一端时：
-
-```bash
-docker compose -f docker-compose.app.yml build backend
-docker compose -f docker-compose.app.yml up -d backend
+```powershell
+# 本机 Windows，仓库根目录
+$env:ECS_PASS='服务器密码'
+python deploy/deploy_frontend.py
 ```
 
 容器重启策略是 `unless-stopped`，服务器重启后会自动拉起。
@@ -211,7 +206,7 @@ docker compose -f docker-compose.app.yml up -d backend
 工作方式：
 
 1. 每 2 分钟 `git fetch origin main`，比对本地与远端 SHA
-2. 有差异 → 按变更路径决定只重建 `backend` 还是 `frontend`（纯文档改动不构建）
+2. 有差异 → **只重建 `backend`**；纯前端提交只做代码同步，等本地推送产物
 3. 部署前把当前镜像打 `:prev` 标签
 4. `up -d` 后轮询 `/api/v1/health`，**60 秒内不健康就自动回滚代码和镜像**
 5. `flock` 防止定时器在上一次未结束时重复触发
@@ -240,6 +235,51 @@ systemctl disable --now ea-deploy.timer  # 关掉自动部署
 
 > 开启后 `main` 的每次推送都会直接上线。开发中可以先把改动推到别的分支，
 > 验证没问题再合并到 `main`。
+
+---
+
+## 7.6 前端发布：本地构建 + 增量上传
+
+**背景**：1 GiB 的实例跑 `vite build`，峰值内存约 700 MB，实测要吃掉 1 GB swap、
+负载冲到 8，每次发版都在赌 OOM。所以前端镜像不再参与发布流程。
+
+现在的链路：
+
+```
+本机 npm run build  →  dist/  →  tar.gz  →  SFTP  →  /opt/enterprise-ai/deploy/html
+                                                      ↓ bind mount（只读）
+                                             容器 /usr/share/nginx/html
+```
+
+服务器侧只有两处配合（都在仓库里）：
+
+- `deploy/docker-compose.app.yml`：`frontend` 服务挂载 `./html:/usr/share/nginx/html:ro`
+- `deploy/deploy.sh`：检测到 `frontend/` 变更时只同步代码，不再 `compose build frontend`
+
+`deploy/html/` 已在 `.gitignore` 中，不会进仓库；`deploy.sh` 发现目录为空时，
+会从现有镜像里兜底导出一份，避免刚切挂载时站点 404。
+
+发布命令（本机 Windows）：
+
+```powershell
+$env:ECS_PASS='服务器密码'
+python deploy/deploy_frontend.py                 # 构建 + 上传 + 校验
+python deploy/deploy_frontend.py --skip-build    # 只上传现有 dist
+```
+
+脚本做的事：
+
+1. `frontend/` 下 `npm ci`（缺 `node_modules` 时）→ `npm run build`
+2. 打包 `dist` 上传到 `/tmp/fe-dist.tar.gz`
+3. 服务器解包：先铺带 hash 的 `assets/`，再用 `mv` 原子替换 `index.html`
+4. 删除 7 天前的旧 hash 资源
+5. 回读站点首页，确认引用的是新入口 bundle
+
+因为 nginx 对 `/assets/` 设了 `immutable`、对 `/` 设了 `no-cache`，这套覆盖式发布
+不需要清缓存也不会出现新旧文件错配。整个过程几秒钟，不重启容器、不影响后端。
+
+> 只有在 Dockerfile / nginx.conf 本身改动时，才需要重新构建前端镜像：
+> `docker compose -f docker-compose.app.yml build frontend`。
 
 ---
 

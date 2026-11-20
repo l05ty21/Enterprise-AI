@@ -43,3 +43,6 @@ minio-data/
 milvus-data/
 etcd-data/
 redis-data/
+
+# ---- 前端发布产物（本地构建后上传到服务器，不入库）----
+deploy/html/

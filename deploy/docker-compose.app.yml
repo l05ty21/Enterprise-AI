@@ -119,6 +119,10 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
+    volumes:
+      # 静态产物由本地 deploy/deploy_frontend.py 构建后上传，挂载覆盖镜像内文件；
+      # 服务器因此不需要再跑 vite build（1 GiB 内存会被 OOM）
+      - ./html:/usr/share/nginx/html:ro
     depends_on:
       backend:
         condition: service_started
