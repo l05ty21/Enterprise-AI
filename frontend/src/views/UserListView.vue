@@ -41,7 +41,8 @@ const form = reactive({
   phone: '',
   department_id: undefined as number | undefined,
   status: 1,
-  role_ids: [] as number[],
+  // 一个账号只允许一个角色；后端同样会校验 role_ids 长度不超过 1
+  role_id: null as number | null,
 })
 
 const canCreate = computed(() => auth.has('user:create'))
@@ -90,7 +91,7 @@ function resetForm(): void {
   form.phone = ''
   form.department_id = undefined
   form.status = 1
-  form.role_ids = []
+  form.role_id = null
   formRef.value?.clearValidate()
 }
 
@@ -162,7 +163,8 @@ function openEdit(row: UserItem): void {
   form.phone = row.phone ?? ''
   form.department_id = row.department_id ?? undefined
   form.status = row.status
-  form.role_ids = row.roles.map((role) => role.id)
+  // 历史数据可能有多个角色，编辑时只回填第一个；保存后即收敛为单选
+  form.role_id = row.roles[0]?.id ?? null
   dialogVisible.value = true
 }
 
@@ -184,7 +186,7 @@ async function handleSubmit(): Promise<void> {
         phone: form.phone || null,
         department_id: form.department_id ?? null,
         status: form.status,
-        role_ids: form.role_ids,
+        role_ids: form.role_id ? [form.role_id] : [],
       }
       if (form.password) {
         payload.password = form.password
@@ -200,7 +202,7 @@ async function handleSubmit(): Promise<void> {
         phone: form.phone || null,
         department_id: form.department_id ?? null,
         status: form.status,
-        role_ids: form.role_ids,
+        role_ids: form.role_id ? [form.role_id] : [],
       }
       await usersApi.create(payload)
       ElMessage.success('用户已创建')
@@ -398,10 +400,10 @@ onMounted(async () => {
         </el-form-item>
         <el-form-item label="角色">
           <el-select
-            v-model="form.role_ids"
-            multiple
+            v-model="form.role_id"
             filterable
-            placeholder="选择角色"
+            clearable
+            placeholder="选择角色（只能选一个）"
             style="width: 100%"
           >
             <el-option

@@ -74,6 +74,22 @@ async def test_create_user(client: AsyncClient, admin_headers, seeded) -> None:
     assert duplicate.status_code == 409
 
 
+async def test_create_user_rejects_multiple_roles(
+    client: AsyncClient, admin_headers, seeded
+) -> None:
+    """一个账号只能挂一个角色，多个 role_ids 直接 422。"""
+    response = await client.post(
+        "/api/v1/users",
+        headers=admin_headers,
+        json={
+            "username": "multirole",
+            "password": "Multi@12345",
+            "role_ids": [seeded.employee_role_id, seeded.super_role_id],
+        },
+    )
+    assert response.status_code == 422, response.text
+
+
 async def test_create_user_invalid_password(client: AsyncClient, admin_headers) -> None:
     response = await client.post(
         "/api/v1/users",

@@ -35,6 +35,14 @@ class UserCreate(BaseModel):
     def _check_password(cls, value: str) -> str:
         return _validate_password(value)
 
+    @field_validator("role_ids")
+    @classmethod
+    def _single_role(cls, value: list[int]) -> list[int]:
+        # 产品约定：一个账号只挂一个角色，避免权限叠加后说不清是谁
+        if len(value) > 1:
+            raise ValueError("一个账号只能分配一个角色")
+        return value
+
 
 class UserUpdate(BaseModel):
     real_name: str | None = Field(default=None, max_length=64)
@@ -50,6 +58,13 @@ class UserUpdate(BaseModel):
     @classmethod
     def _check_password(cls, value: str | None) -> str | None:
         return None if value is None else _validate_password(value)
+
+    @field_validator("role_ids")
+    @classmethod
+    def _single_role(cls, value: list[int] | None) -> list[int] | None:
+        if value is not None and len(value) > 1:
+            raise ValueError("一个账号只能分配一个角色")
+        return value
 
 
 class UserRead(BaseModel):
