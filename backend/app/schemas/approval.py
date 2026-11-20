@@ -37,7 +37,8 @@ class ApprovalRead(BaseModel):
     id: int
     title: str
     business_type: str
-    amount: Decimal | None = None
+    # business_data 里存的是 JSON number，用 float 回吐，避免 Decimal 被序列化成字符串
+    amount: float | None = None
     reason: str | None = None
     status: str
     applicant_id: int
