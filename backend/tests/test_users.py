@@ -3,8 +3,23 @@ from __future__ import annotations
 from httpx import AsyncClient
 
 
-async def test_list_users_requires_permission(client: AsyncClient, employee_headers) -> None:
+async def test_employee_can_list_users_readonly(
+    client: AsyncClient, employee_headers
+) -> None:
+    """普通员工可以看通讯录，但不能改（写权限见 test_employee_cannot_create_user）。"""
     response = await client.get("/api/v1/users", headers=employee_headers)
+    assert response.status_code == 200, response.text
+    assert response.json()["total"] >= 1
+
+
+async def test_employee_cannot_create_user(
+    client: AsyncClient, employee_headers
+) -> None:
+    response = await client.post(
+        "/api/v1/users",
+        json={"username": "hacker", "password": "Hack@12345"},
+        headers=employee_headers,
+    )
     assert response.status_code == 403
     assert response.json()["code"] == "forbidden"
 

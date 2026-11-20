@@ -88,8 +88,20 @@ async def test_create_and_delete_empty_department(
     assert deleted.status_code == 200
 
 
-async def test_employee_cannot_read_departments(
+async def test_employee_can_read_departments(
     client: AsyncClient, employee_headers
 ) -> None:
     response = await client.get("/api/v1/departments", headers=employee_headers)
+    assert response.status_code == 200
+
+
+async def test_employee_cannot_create_department(
+    client: AsyncClient, employee_headers
+) -> None:
+    response = await client.post(
+        "/api/v1/departments",
+        json={"name": "偷偷建的部门", "parent_id": None},
+        headers=employee_headers,
+    )
     assert response.status_code == 403
+    assert response.json()["code"] == "forbidden"
