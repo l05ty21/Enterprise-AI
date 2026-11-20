@@ -4,12 +4,14 @@ from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
     ai,
+    approvals,
     auth,
     departments,
     health,
     knowledge,
     permissions,
     roles,
+    tickets,
     users,
 )
 
@@ -22,3 +24,5 @@ api_router.include_router(permissions.router)
 api_router.include_router(departments.router)
 api_router.include_router(ai.router)
 api_router.include_router(knowledge.router)
+api_router.include_router(tickets.router)
+api_router.include_router(approvals.router)

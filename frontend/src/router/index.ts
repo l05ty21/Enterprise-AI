@@ -60,6 +60,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '部门管理', icon: 'OfficeBuilding', permission: 'department:read' },
       },
       {
+        path: 'tickets',
+        name: 'Tickets',
+        component: () => import('@/views/TicketView.vue'),
+        meta: { title: '工单', icon: 'Tickets', permission: 'ticket:read' },
+      },
+      {
+        path: 'approvals',
+        name: 'Approvals',
+        component: () => import('@/views/ApprovalView.vue'),
+        meta: { title: '审批', icon: 'Checked', permission: 'approval:read' },
+      },
+      {
         path: 'ai-models',
         name: 'AiModels',
         component: () => import('@/views/AiModelConfigView.vue'),

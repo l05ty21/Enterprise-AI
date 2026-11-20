@@ -5,13 +5,14 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ArrowDown,
   ChatDotRound,
+  Checked,
   Expand,
   Files,
   Fold,
-  Lock,
   Odometer,
   OfficeBuilding,
   Setting,
+  Tickets,
   User,
 } from '@element-plus/icons-vue'
 
@@ -109,13 +110,13 @@ function handleCommand(command: string): void {
           <el-icon><Files /></el-icon>
           <template #title>知识库</template>
         </el-menu-item>
-        <el-menu-item disabled index="/tickets">
-          <el-icon><Lock /></el-icon>
-          <template #title>工单（规划中）</template>
+        <el-menu-item v-if="auth.has('ticket:read')" index="/tickets">
+          <el-icon><Tickets /></el-icon>
+          <template #title>工单</template>
         </el-menu-item>
-        <el-menu-item disabled index="/approvals">
-          <el-icon><Lock /></el-icon>
-          <template #title>审批（规划中）</template>
+        <el-menu-item v-if="auth.has('approval:read')" index="/approvals">
+          <el-icon><Checked /></el-icon>
+          <template #title>审批</template>
         </el-menu-item>
 
         <el-menu-item index="/profile">

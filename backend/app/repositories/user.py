@@ -151,3 +151,20 @@ class UserRepository(BaseRepository[User]):
             user_id: (real_name or username)
             for user_id, real_name, username in (await self.session.execute(stmt)).all()
         }
+
+    async def ids_with_permission(self, organization_id: int, code: str) -> list[int]:
+        """该企业下拥有某个权限点的启用账号，按 id 升序（用于自动指派审批人）。"""
+        stmt = (
+            select(User.id)
+            .distinct()
+            .join(UserRole, UserRole.user_id == User.id)
+            .join(RolePermission, RolePermission.role_id == UserRole.role_id)
+            .join(Permission, Permission.id == RolePermission.permission_id)
+            .where(
+                User.organization_id == organization_id,
+                User.status == 1,
+                Permission.code == code,
+            )
+            .order_by(User.id)
+        )
+        return list(await self.session.scalars(stmt))
