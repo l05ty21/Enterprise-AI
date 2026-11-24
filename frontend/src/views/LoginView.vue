@@ -21,6 +21,7 @@ const form = reactive({
 })
 
 // 演示账号：课程演示用。上线给真实用户前把 SHOW_DEMO_ACCOUNT 改为 false 即可隐藏。
+// 测试效果更改
 const SHOW_DEMO_ACCOUNT = true
 const DEMO_ACCOUNT = {
   organization_code: 'demo',
