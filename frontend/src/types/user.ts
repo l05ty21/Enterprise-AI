@@ -28,15 +28,6 @@ export interface LoginPayload {
   organization_code?: string
 }
 
-export interface RegisterPayload {
-  organization_name: string
-  organization_code: string
-  username: string
-  password: string
-  real_name?: string | null
-  email?: string | null
-}
-
 export interface TokenPair {
   access_token: string
   refresh_token: string

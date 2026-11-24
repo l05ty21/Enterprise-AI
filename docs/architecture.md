@@ -79,7 +79,7 @@ User ──< user_roles >── Role ──< role_permissions >── Permission
 | `super_admin` | 超级管理员 | 全部 |
 | `org_admin` | 企业管理员 | 全部（本企业范围） |
 | `dept_manager` | 部门经理 | 用户/部门只读、工单、审批、项目 |
-| `employee` | 普通员工 | 工单、审批、项目只读、AI 对话 |
+| `employee` | 普通员工 | 用户/部门只读（通讯录）、工单、审批、项目只读、AI 对话；**组织管理内无任何写权限** |
 
 ## 5. 多租户隔离
 

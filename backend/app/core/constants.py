@@ -90,13 +90,19 @@ ROLE_PRESETS: Final[dict[str, dict]] = {
     },
     "employee": {
         "name": "普通员工",
-        "description": "提交工单、发起审批、使用 AI 助手与知识库",
+        "description": "查看组织架构与同事，提交工单、发起审批、使用 AI 助手与知识库（组织管理只读）",
         "permissions": [
             "menu:dashboard",
+            "menu:organization",
+            "menu:user",
+            "menu:department",
             "menu:ticket",
             "menu:approval",
             "menu:project",
             "menu:knowledge",
+            # 组织管理只读：能看通讯录和部门树，但没有任何 create / update / delete
+            "user:read",
+            "department:read",
             "ticket:read",
             "ticket:create",
             "approval:read",

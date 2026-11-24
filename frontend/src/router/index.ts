@@ -19,12 +19,6 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '登录', public: true },
   },
   {
-    path: '/register',
-    name: 'Register',
-    component: () => import('@/views/RegisterView.vue'),
-    meta: { title: '企业注册', public: true },
-  },
-  {
     path: '/',
     component: () => import('@/layouts/DefaultLayout.vue'),
     redirect: '/dashboard',
@@ -66,6 +60,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '部门管理', icon: 'OfficeBuilding', permission: 'department:read' },
       },
       {
+        path: 'tickets',
+        name: 'Tickets',
+        component: () => import('@/views/TicketView.vue'),
+        meta: { title: '工单', icon: 'Tickets', permission: 'ticket:read' },
+      },
+      {
+        path: 'approvals',
+        name: 'Approvals',
+        component: () => import('@/views/ApprovalView.vue'),
+        meta: { title: '审批', icon: 'Checked', permission: 'approval:read' },
+      },
+      {
         path: 'ai-models',
         name: 'AiModels',
         component: () => import('@/views/AiModelConfigView.vue'),
@@ -103,8 +109,8 @@ router.beforeEach(async (to) => {
   const auth = useAuthStore()
 
   if (to.meta.public) {
-    // 登录页 / 注册页：已登录用户直接进工作台
-    const guestOnly = to.path === '/login' || to.path === '/register'
+    // 登录页：已登录用户直接进工作台
+    const guestOnly = to.path === '/login'
     if (guestOnly && auth.isLoggedIn) {
       return { path: '/dashboard' }
     }

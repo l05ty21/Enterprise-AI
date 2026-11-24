@@ -7,15 +7,17 @@
 #
 # 设计要点：
 #   1. flock 防并发——定时器可能在上一次部署还没结束时再次触发
-#   2. 只重建路径有变动的服务，纯文档改动不会触发构建
-#   3. 部署前把当前镜像打 :prev 标签，健康检查失败时秒级回滚
-#   4. 构建在旧容器仍在运行时进行，构建失败不影响线上
+#   2. 前端不再在服务器构建：静态产物由本地 deploy/deploy_frontend.py 上传到
+#      deploy/html，通过 bind mount 直接给 nginx 使用（1 GiB 内存扛不住 vite build）
+#   3. 只重建后端；纯前端提交只做 git 同步，等本地推送产物
+#   4. 部署前把当前镜像打 :prev 标签，健康检查失败时秒级回滚
 
 set -uo pipefail
 
 APP_DIR=/opt/enterprise-ai
 DEPLOY_DIR="$APP_DIR/deploy"
 COMPOSE_FILE="$DEPLOY_DIR/docker-compose.app.yml"
+HTML_DIR="$DEPLOY_DIR/html"
 BRANCH=main
 LOG=/var/log/ea-deploy.log
 LOCK=/var/lock/ea-deploy.lock
@@ -52,15 +54,38 @@ git log --oneline "$OLD..$NEW" | head -20 >>"$LOG"
 
 CHANGED=$(git diff --name-only "$OLD" "$NEW")
 NEED_BACKEND=0
-NEED_FRONTEND=0
+FRONTEND_CHANGED=0
+DEPLOY_CHANGED=0
 echo "$CHANGED" | grep -q '^backend/' && NEED_BACKEND=1
-echo "$CHANGED" | grep -q '^frontend/' && NEED_FRONTEND=1
-if echo "$CHANGED" | grep -qE '^(deploy/|backend/Dockerfile|frontend/Dockerfile)'; then
-  NEED_BACKEND=1
-  NEED_FRONTEND=1
-fi
+echo "$CHANGED" | grep -q '^backend/Dockerfile' && NEED_BACKEND=1
+echo "$CHANGED" | grep -q '^frontend/' && FRONTEND_CHANGED=1
+echo "$CHANGED" | grep -q '^deploy/' && DEPLOY_CHANGED=1
 
-log "变动文件数: $(echo "$CHANGED" | wc -l)，backend=$NEED_BACKEND frontend=$NEED_FRONTEND"
+log "变动文件数: $(echo "$CHANGED" | wc -l)，backend=$NEED_BACKEND frontend=$FRONTEND_CHANGED deploy=$DEPLOY_CHANGED"
+
+# deploy/html 是 nginx 的根目录（bind mount）。为空时先从现有镜像兜底导出，
+# 避免刚切到挂载目录时站点 404。
+ensure_html() {
+  mkdir -p "$HTML_DIR"
+  if [ ! -f "$HTML_DIR/index.html" ]; then
+    log "deploy/html 为空，从现有前端镜像兜底导出一次"
+    local cid
+    cid=$(docker create enterprise-ai-frontend:latest 2>/dev/null) || return 0
+    docker cp "$cid:/usr/share/nginx/html/." "$HTML_DIR/" >>"$LOG" 2>&1 || true
+    docker rm -f "$cid" >/dev/null 2>&1 || true
+  fi
+}
+
+ensure_html
+
+if [ "$NEED_BACKEND" = 0 ] && [ "$DEPLOY_CHANGED" = 0 ]; then
+  git reset --hard "$NEW" -q
+  if [ "$FRONTEND_CHANGED" = 1 ]; then
+    log "只有前端改动：请在本地执行 deploy/deploy_frontend.py 构建并上传，服务器跳过重建"
+  fi
+  log "无需重建，代码同步到 ${NEW:0:7}"
+  exit 0
+fi
 
 # 备份当前镜像，供失败回滚使用
 docker tag enterprise-ai-backend:latest  enterprise-ai-backend:prev  2>/dev/null || true
@@ -71,13 +96,9 @@ if ! git reset --hard "$NEW" -q; then
   exit 1
 fi
 
-TARGETS=""
-[ "$NEED_BACKEND" = 1 ] && TARGETS="$TARGETS backend"
-[ "$NEED_FRONTEND" = 1 ] && TARGETS="$TARGETS frontend"
-
-if [ -n "$TARGETS" ]; then
-  log "开始构建:$TARGETS"
-  if ! compose build $TARGETS >>"$LOG" 2>&1; then
+if [ "$NEED_BACKEND" = 1 ]; then
+  log "开始构建后端"
+  if ! compose build backend >>"$LOG" 2>&1; then
     log "!!! 构建失败，代码回退到 ${OLD:0:7}，线上保持旧版本"
     git reset --hard "$OLD" -q
     exit 1
@@ -101,5 +122,5 @@ git reset --hard "$OLD" -q
 docker tag enterprise-ai-backend:prev  enterprise-ai-backend:latest  2>/dev/null || true
 docker tag enterprise-ai-frontend:prev enterprise-ai-frontend:latest 2>/dev/null || true
 compose up -d >>"$LOG" 2>&1
-log "已回滚，线上恢复为 ${OLD:0:7}"
+log "已回滚，线上恢复为 ${OLD:0:7}（前端产物需本地重新上传）"
 exit 1

@@ -89,6 +89,8 @@ class DepartmentService:
         )
         await self.departments.add(department)
         await self.session.commit()
+        # 同 user.create_user：MySQL 下 created_at 需显式回读，否则序列化时惰性查询报 500
+        await self.session.refresh(department)
         return DepartmentRead(
             id=department.id,
             organization_id=department.organization_id,
