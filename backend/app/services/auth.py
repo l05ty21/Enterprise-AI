@@ -160,6 +160,7 @@ class AuthService:
             department_id=user.department_id,
             department_name=dept.name if dept else None,
             is_superuser=is_superuser,
+            must_change_password=bool(getattr(user, "must_change_password", 0)),
             roles=[RoleBrief.model_validate(role) for role in roles],
             permissions=permissions,
         )
@@ -170,6 +171,7 @@ class AuthService:
         if payload.old_password == payload.new_password:
             raise BadRequestError("新密码不能与原密码相同")
         user.password_hash = hash_password(payload.new_password)
+        user.must_change_password = 0
         await self.session.commit()
 
     async def update_profile(

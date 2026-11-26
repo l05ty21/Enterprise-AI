@@ -4,6 +4,7 @@ Alembic 与 ``Base.metadata.create_all`` 都依赖这里的导入来发现全部
 """
 
 from app.models.approval import ApprovalInstance, ApprovalTask, ApprovalTemplate
+from app.models.attachment import Attachment
 from app.models.chat import AIModelConfig, AIUsageLog, ChatMessage, Conversation
 from app.models.knowledge import Document, DocumentChunk, KnowledgeBase
 from app.models.organization import Department, Organization
@@ -34,6 +35,7 @@ __all__ = [
     "ApprovalTemplate",
     "ApprovalInstance",
     "ApprovalTask",
+    "Attachment",
     "Project",
     "Task",
     "TaskComment",

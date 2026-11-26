@@ -148,6 +148,7 @@ async def seed_admin(session, organization: Organization, roles: dict[str, Role]
             real_name=settings.FIRST_SUPERUSER_REAL_NAME,
             email=settings.FIRST_SUPERUSER_EMAIL,
             status=1,
+            must_change_password=1,
         )
         session.add(admin)
         await session.flush()

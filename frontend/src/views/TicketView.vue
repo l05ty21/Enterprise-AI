@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
-import { Plus, Search } from '@element-plus/icons-vue'
+import { useRoute } from 'vue-router'
+import { ElMessage, type UploadRequestOptions } from 'element-plus'
+import { Plus, Search, UploadFilled } from '@element-plus/icons-vue'
 
+import { attachmentsApi } from '@/api/attachments'
 import { resolveErrorMessage } from '@/api/client'
 import { ticketsApi } from '@/api/tickets'
 import { usersApi } from '@/api/users'
@@ -10,6 +12,7 @@ import { useAuthStore } from '@/stores/auth'
 import type { Ticket, TicketDetail, TicketPriority, TicketStatus } from '@/types/ticket'
 
 const auth = useAuthStore()
+const route = useRoute()
 const canCreate = computed(() => auth.has('ticket:create'))
 const canHandle = computed(() => auth.has('ticket:update'))
 const canReadUsers = computed(() => auth.has('user:read'))
@@ -17,12 +20,14 @@ const canReadUsers = computed(() => auth.has('user:read'))
 const loading = ref(false)
 const rows = ref<Ticket[]>([])
 const total = ref(0)
+const uploading = ref(false)
 
 const query = reactive({
   keyword: '',
   status: '' as TicketStatus | '',
   priority: '' as TicketPriority | '',
   mine: false,
+  assignee_me: false,
   page: 1,
   page_size: 10,
 })
@@ -56,7 +61,8 @@ async function loadTickets(): Promise<void> {
       keyword: query.keyword || undefined,
       status: query.status || undefined,
       priority: query.priority || undefined,
-      mine: query.mine,
+      mine: query.assignee_me ? false : query.mine,
+      assignee_me: query.assignee_me,
     })
     rows.value = data.items
     total.value = data.total
@@ -77,8 +83,47 @@ function handleReset(): void {
   query.status = ''
   query.priority = ''
   query.mine = false
+  query.assignee_me = false
   query.page = 1
   void loadTickets()
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+async function uploadAttachment(options: UploadRequestOptions): Promise<void> {
+  if (!detail.value) return
+  uploading.value = true
+  try {
+    await attachmentsApi.uploadTicket(detail.value.id, options.file as File)
+    ElMessage.success('附件已上传')
+    await refreshDetail()
+  } catch (error) {
+    ElMessage.error(resolveErrorMessage(error, '附件上传失败'))
+  } finally {
+    uploading.value = false
+  }
+}
+
+async function downloadAttachment(id: number, filename: string): Promise<void> {
+  try {
+    await attachmentsApi.download(id, filename)
+  } catch (error) {
+    ElMessage.error(resolveErrorMessage(error, '下载失败'))
+  }
+}
+
+async function removeAttachment(id: number): Promise<void> {
+  try {
+    await attachmentsApi.remove(id)
+    ElMessage.success('附件已删除')
+    await refreshDetail()
+  } catch (error) {
+    ElMessage.error(resolveErrorMessage(error, '删除失败'))
+  }
 }
 
 // ---------------------------------------------------------------- 新建
@@ -201,7 +246,13 @@ async function sendComment(): Promise<void> {
   }
 }
 
-onMounted(loadTickets)
+onMounted(() => {
+  if (route.query.assignee_me === '1') {
+    query.assignee_me = true
+    query.mine = false
+  }
+  void loadTickets()
+})
 </script>
 
 <template>
@@ -227,7 +278,10 @@ onMounted(loadTickets)
           <el-option label="高" value="high" />
           <el-option label="紧急" value="urgent" />
         </el-select>
-        <el-checkbox v-model="query.mine" @change="handleSearch">只看我的</el-checkbox>
+        <el-checkbox v-model="query.mine" :disabled="query.assignee_me" @change="handleSearch">
+          只看我的
+        </el-checkbox>
+        <el-checkbox v-model="query.assignee_me" @change="handleSearch">待我处理</el-checkbox>
         <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
         <el-button @click="handleReset">重置</el-button>
         <div class="spacer" />
@@ -324,6 +378,36 @@ onMounted(loadTickets)
           </div>
 
           <p class="desc">{{ detail.description || '（没有填写描述）' }}</p>
+
+          <el-divider content-position="left">
+            附件（{{ detail.attachments?.length || 0 }}）
+          </el-divider>
+          <div class="attach-list">
+            <div v-for="file in detail.attachments || []" :key="file.id" class="attach-item">
+              <div>
+                <el-button link type="primary" @click="downloadAttachment(file.id, file.filename)">
+                  {{ file.filename }}
+                </el-button>
+                <span class="muted">
+                  {{ formatSize(file.file_size) }}
+                  · {{ file.uploader_name || '未知' }}
+                </span>
+              </div>
+              <el-button link type="danger" @click="removeAttachment(file.id)">删除</el-button>
+            </div>
+            <el-empty
+              v-if="!(detail.attachments && detail.attachments.length)"
+              description="暂无附件"
+              :image-size="48"
+            />
+          </div>
+          <el-upload
+            :http-request="uploadAttachment"
+            :show-file-list="false"
+            :disabled="uploading"
+          >
+            <el-button :icon="UploadFilled" :loading="uploading">上传附件</el-button>
+          </el-upload>
 
           <div v-if="canHandle" class="actions">
             <el-select
@@ -474,5 +558,20 @@ onMounted(loadTickets)
   flex-direction: column;
   gap: 8px;
   align-items: flex-end;
+}
+.attach-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.attach-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  background: #f8fafc;
+  border-radius: 6px;
 }
 </style>

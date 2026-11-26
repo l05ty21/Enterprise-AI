@@ -30,6 +30,13 @@ class User(Base, TimestampMixin):
     status: Mapped[int] = mapped_column(
         SmallInteger, nullable=False, server_default="1", comment="1 正常 / 0 禁用"
     )
+    must_change_password: Mapped[int] = mapped_column(
+        SmallInteger,
+        nullable=False,
+        default=0,
+        server_default="0",
+        comment="1 首次登录须改密 / 0 正常",
+    )
     last_login_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
     __table_args__ = (

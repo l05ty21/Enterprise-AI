@@ -20,6 +20,8 @@ class Notification(Base, CreatedAtMixin):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     content: Mapped[str | None] = mapped_column(long_text())
     type: Mapped[str | None] = mapped_column(String(32))
+    link_type: Mapped[str | None] = mapped_column(String(32))
+    link_id: Mapped[int | None] = mapped_column(bigint_unsigned(), nullable=True)
     is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="0")
 
     __table_args__ = (Index("idx_notification_user", "user_id", "is_read"),)

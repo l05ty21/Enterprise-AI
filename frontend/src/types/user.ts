@@ -18,6 +18,7 @@ export interface CurrentUser {
   department_id: number | null
   department_name: string | null
   is_superuser: boolean
+  must_change_password: boolean
   roles: RoleBrief[]
   permissions: string[]
 }

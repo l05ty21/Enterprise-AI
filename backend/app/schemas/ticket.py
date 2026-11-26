@@ -5,6 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.attachment import AttachmentBrief
+
 TicketPriority = Literal["low", "medium", "high", "urgent"]
 TicketStatus = Literal["pending", "processing", "resolved", "closed"]
 
@@ -31,6 +33,9 @@ class TicketQuery(BaseModel):
     status: TicketStatus | None = None
     priority: TicketPriority | None = None
     mine: bool = Field(default=False, description="只看我提交或被指派的")
+    assignee_me: bool = Field(
+        default=False, description="只看指派给我且未关闭的待办工单"
+    )
 
 
 class TicketCommentRead(BaseModel):
@@ -69,3 +74,4 @@ class TicketRead(BaseModel):
 class TicketDetail(TicketRead):
     comments: list[TicketCommentRead] = Field(default_factory=list)
     histories: list[TicketHistoryRead] = Field(default_factory=list)
+    attachments: list[AttachmentBrief] = Field(default_factory=list)

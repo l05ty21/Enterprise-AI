@@ -1,8 +1,4 @@
-"""审批业务逻辑：发起、待办、通过/驳回。
-
-一期只做单节点审批（一个审批人），但数据模型保留 tasks / node_index，
-后续加多级审批时不用改表。
-"""
+"""审批业务逻辑：发起、待办、多级串签通过/驳回。"""
 
 from __future__ import annotations
 
@@ -26,6 +22,8 @@ from app.schemas.approval import (
     ApprovalTaskRead,
 )
 from app.schemas.common import Page, PageParams
+from app.services.attachment import AttachmentService
+from app.services.notification import NotificationService
 from app.utils.datetime import now_naive
 
 DEFAULT_TEMPLATE_NAME = "通用审批"
@@ -74,12 +72,33 @@ class ApprovalService:
         )
         candidates = [i for i in candidates if i != user.id]
         if not candidates:
-            # 刻意不允许自己审批自己：单人企业需要先补一个审批人
             raise BadRequestError(
                 "没有可用的审批人：审批不能由申请人自己完成，"
                 "请先在「用户管理」里添加一个具备「审批操作」权限的成员"
             )
         return candidates[0]
+
+    async def _resolve_approver_ids(
+        self, current: CurrentUser, payload: ApprovalCreate
+    ) -> list[int]:
+        if payload.approver_ids:
+            ordered: list[int] = []
+            seen: set[int] = set()
+            for raw in payload.approver_ids:
+                uid = int(raw)
+                if uid in seen:
+                    continue
+                if uid == current.id:
+                    raise BadRequestError("不能选择自己作为审批人")
+                user = await self.users.get_in_org(current.organization_id, uid)
+                if user is None or user.status != 1:
+                    raise BadRequestError(f"审批人无效或不属于当前企业：{uid}")
+                ordered.append(uid)
+                seen.add(uid)
+            if not ordered:
+                raise BadRequestError("请至少选择一位审批人")
+            return ordered
+        return [await self._resolve_approver(current)]
 
     def _to_read(
         self,
@@ -99,10 +118,20 @@ class ApprovalService:
             status=instance.status,
             applicant_id=instance.applicant_id,
             applicant_name=names.get(instance.applicant_id),
+            current_node=instance.current_node,
             current_approver_name=names.get(current_approver_id or 0),
             can_decide=can_decide,
             created_at=instance.created_at,
         )
+
+    async def _current_pending_approver(
+        self, instance_id: int
+    ) -> ApprovalTask | None:
+        tasks = await self.tasks.list_for_instance(instance_id)
+        for task in tasks:
+            if task.status == "pending":
+                return task
+        return None
 
     # ------------------------------------------------------------------ 查询
     async def list_approvals(
@@ -131,16 +160,20 @@ class ApprovalService:
         items: list[ApprovalRead] = []
         for inst in instances:
             pending_task = await self.tasks.pending_for(inst.id, current.id)
-            if pending_task is not None and pending_task.approver_id not in names:
-                names.update(await self.users.names_by_ids([pending_task.approver_id]))
+            current_pending = await self._current_pending_approver(inst.id)
+            approver_id = (
+                pending_task.approver_id
+                if pending_task is not None
+                else (current_pending.approver_id if current_pending else None)
+            )
+            if approver_id and approver_id not in names:
+                names.update(await self.users.names_by_ids([approver_id]))
             items.append(
                 self._to_read(
                     inst,
                     names,
                     can_decide=pending_task is not None and inst.status == "pending",
-                    current_approver_id=(
-                        pending_task.approver_id if pending_task is not None else None
-                    ),
+                    current_approver_id=approver_id,
                 )
             )
 
@@ -171,11 +204,19 @@ class ApprovalService:
             [instance.applicant_id, *[t.approver_id for t in tasks]]
         )
         pending_task = await self.tasks.pending_for(instance.id, current.id)
+        current_pending = await self._current_pending_approver(instance.id)
         base = self._to_read(
             instance,
             names,
             can_decide=pending_task is not None and instance.status == "pending",
-            current_approver_id=pending_task.approver_id if pending_task else None,
+            current_approver_id=(
+                pending_task.approver_id
+                if pending_task
+                else (current_pending.approver_id if current_pending else None)
+            ),
+        )
+        attachments = await AttachmentService(self.session).list_briefs(
+            current.organization_id, "approval", instance.id
         )
         return ApprovalDetail(
             **base.model_dump(),
@@ -184,18 +225,21 @@ class ApprovalService:
                     id=t.id,
                     approver_id=t.approver_id,
                     approver_name=names.get(t.approver_id),
+                    node_index=t.node_index,
                     status=t.status,
                     comment=t.comment,
                     handled_at=t.handled_at,
                 )
                 for t in tasks
             ],
+            attachments=attachments,
         )
 
     # ------------------------------------------------------------------ 写入
     async def create(self, current: CurrentUser, payload: ApprovalCreate) -> ApprovalRead:
         template = await self._ensure_template(current.organization_id)
-        approver_id = await self._resolve_approver(current)
+        approver_ids = await self._resolve_approver_ids(current, payload)
+        names_preview = await self.users.names_by_ids(approver_ids)
 
         instance = ApprovalInstance(
             organization_id=current.organization_id,
@@ -206,25 +250,47 @@ class ApprovalService:
                 "title": payload.title.strip(),
                 "amount": float(payload.amount) if payload.amount is not None else None,
                 "reason": payload.reason,
+                "flow": [
+                    {
+                        "index": index,
+                        "approver_id": uid,
+                        "approver_name": names_preview.get(uid),
+                    }
+                    for index, uid in enumerate(approver_ids, start=1)
+                ],
             },
             status="pending",
             current_node=1,
         )
         await self.instances.add(instance)
-        await self.tasks.add(
-            ApprovalTask(
-                instance_id=instance.id,
-                approver_id=approver_id,
-                node_index=1,
-                status="pending",
+
+        for index, uid in enumerate(approver_ids, start=1):
+            await self.tasks.add(
+                ApprovalTask(
+                    instance_id=instance.id,
+                    approver_id=uid,
+                    node_index=index,
+                    status="pending" if index == 1 else "waiting",
+                )
             )
+
+        notify = NotificationService(self.session)
+        await notify.notify(
+            organization_id=current.organization_id,
+            user_id=approver_ids[0],
+            title=f"待你审批：{payload.title.strip()}",
+            content="有新的审批单据到达你的待办",
+            type="approval_todo",
+            link_type="approval",
+            link_id=instance.id,
         )
+
         await self.session.commit()
         await self.session.refresh(instance)
 
-        names = await self.users.names_by_ids([instance.applicant_id, approver_id])
+        names = await self.users.names_by_ids([instance.applicant_id, approver_ids[0]])
         return self._to_read(
-            instance, names, can_decide=False, current_approver_id=approver_id
+            instance, names, can_decide=False, current_approver_id=approver_ids[0]
         )
 
     async def decide(
@@ -244,7 +310,50 @@ class ApprovalService:
         task.status = "approved" if approved else "rejected"
         task.comment = payload.comment
         task.handled_at = now_naive()
-        instance.status = "approved" if approved else "rejected"
+
+        notify = NotificationService(self.session)
+        title = str((instance.business_data or {}).get("title") or "审批")
+
+        if not approved:
+            instance.status = "rejected"
+            await notify.notify(
+                organization_id=current.organization_id,
+                user_id=instance.applicant_id,
+                title=f"审批已驳回：{title}",
+                content=payload.comment or "审批人驳回了你的申请",
+                type="approval_rejected",
+                link_type="approval",
+                link_id=instance.id,
+            )
+        else:
+            tasks = await self.tasks.list_for_instance(instance.id)
+            next_task = next(
+                (t for t in tasks if t.node_index == task.node_index + 1),
+                None,
+            )
+            if next_task is not None:
+                next_task.status = "pending"
+                instance.current_node = next_task.node_index
+                await notify.notify(
+                    organization_id=current.organization_id,
+                    user_id=next_task.approver_id,
+                    title=f"待你审批：{title}",
+                    content=f"第 {next_task.node_index} 级审批已到达你的待办",
+                    type="approval_todo",
+                    link_type="approval",
+                    link_id=instance.id,
+                )
+            else:
+                instance.status = "approved"
+                await notify.notify(
+                    organization_id=current.organization_id,
+                    user_id=instance.applicant_id,
+                    title=f"审批已通过：{title}",
+                    content="全部审批节点已通过",
+                    type="approval_approved",
+                    link_type="approval",
+                    link_id=instance.id,
+                )
 
         await self.session.commit()
         return await self.get_detail(current, instance.id)

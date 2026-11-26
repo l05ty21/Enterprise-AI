@@ -6,6 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.attachment import AttachmentBrief
+
 ApprovalStatus = Literal["pending", "approved", "rejected"]
 BusinessType = Literal["expense", "leave", "purchase", "other"]
 
@@ -17,6 +19,12 @@ class ApprovalCreate(BaseModel):
         default=None, ge=0, le=99999999, description="金额（报销/采购时填写）"
     )
     reason: str | None = Field(default=None, max_length=2000, description="申请说明")
+    approver_ids: list[int] | None = Field(
+        default=None,
+        min_length=1,
+        max_length=10,
+        description="有序审批人列表；不传则自动解析单级审批人",
+    )
 
 
 class ApprovalDecision(BaseModel):
@@ -28,6 +36,7 @@ class ApprovalTaskRead(BaseModel):
     id: int
     approver_id: int
     approver_name: str | None = None
+    node_index: int = 1
     status: str
     comment: str | None = None
     handled_at: datetime | None = None
@@ -43,6 +52,7 @@ class ApprovalRead(BaseModel):
     status: str
     applicant_id: int
     applicant_name: str | None = None
+    current_node: int = 1
     current_approver_name: str | None = None
     can_decide: bool = False
     created_at: datetime | None = None
@@ -50,3 +60,4 @@ class ApprovalRead(BaseModel):
 
 class ApprovalDetail(ApprovalRead):
     tasks: list[ApprovalTaskRead] = Field(default_factory=list)
+    attachments: list[AttachmentBrief] = Field(default_factory=list)

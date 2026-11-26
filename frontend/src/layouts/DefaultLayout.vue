@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ArrowDown,
+  Bell,
   ChatDotRound,
   Checked,
   Expand,
@@ -16,8 +17,11 @@ import {
   User,
 } from '@element-plus/icons-vue'
 
+import { resolveErrorMessage } from '@/api/client'
+import { notificationsApi } from '@/api/notifications'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
+import type { NotificationItem } from '@/types/notification'
 
 const route = useRoute()
 const router = useRouter()
@@ -32,6 +36,67 @@ const canRole = computed(() => auth.has('role:read'))
 const canDepartment = computed(() => auth.has('department:read'))
 const canOrganization = computed(() => canUser.value || canRole.value || canDepartment.value)
 const canSystem = computed(() => auth.has('system:config'))
+
+const unreadCount = ref(0)
+const notifyLoading = ref(false)
+const notifications = ref<NotificationItem[]>([])
+const notifyVisible = ref(false)
+let pollTimer: number | undefined
+
+async function loadUnread(): Promise<void> {
+  try {
+    const { data } = await notificationsApi.unreadCount()
+    unreadCount.value = data.count
+  } catch {
+    // 轮询失败不打断主流程
+  }
+}
+
+async function loadNotifications(): Promise<void> {
+  notifyLoading.value = true
+  try {
+    const { data } = await notificationsApi.list({ page: 1, page_size: 12 })
+    notifications.value = data.items
+  } catch (error) {
+    ElMessage.warning(resolveErrorMessage(error, '通知加载失败'))
+  } finally {
+    notifyLoading.value = false
+  }
+}
+
+async function openNotify(): Promise<void> {
+  notifyVisible.value = true
+  await Promise.all([loadNotifications(), loadUnread()])
+}
+
+async function handleNotifyClick(item: NotificationItem): Promise<void> {
+  if (!item.is_read) {
+    try {
+      await notificationsApi.markRead(item.id)
+      item.is_read = true
+      unreadCount.value = Math.max(0, unreadCount.value - 1)
+    } catch {
+      // ignore
+    }
+  }
+  notifyVisible.value = false
+  if (item.link_type === 'ticket' && item.link_id) {
+    void router.push({ path: '/tickets' })
+  } else if (item.link_type === 'approval' && item.link_id) {
+    void router.push({ path: '/approvals', query: { scope: 'todo' } })
+  }
+}
+
+async function markAllRead(): Promise<void> {
+  try {
+    await notificationsApi.markAllRead()
+    unreadCount.value = 0
+    notifications.value = notifications.value.map((item) => ({ ...item, is_read: true }))
+    ElMessage.success('已全部标记为已读')
+  } catch (error) {
+    ElMessage.error(resolveErrorMessage(error, '操作失败'))
+  }
+}
 
 async function handleLogout(): Promise<void> {
   try {
@@ -55,6 +120,17 @@ function handleCommand(command: string): void {
     router.push('/profile')
   }
 }
+
+onMounted(() => {
+  void loadUnread()
+  pollTimer = window.setInterval(() => {
+    void loadUnread()
+  }, 60000)
+})
+
+onBeforeUnmount(() => {
+  if (pollTimer) window.clearInterval(pollTimer)
+})
 </script>
 
 <template>
@@ -145,6 +221,46 @@ function handleCommand(command: string): void {
           <el-tag v-if="auth.user?.organization_name" type="info" effect="plain">
             {{ auth.user.organization_name }}
           </el-tag>
+
+          <el-popover
+            :visible="notifyVisible"
+            placement="bottom-end"
+            :width="360"
+            trigger="click"
+            @update:visible="(v: boolean) => (notifyVisible = v)"
+          >
+            <template #reference>
+              <el-badge :value="unreadCount" :hidden="!unreadCount" :max="99">
+                <el-button circle :icon="Bell" @click="openNotify" />
+              </el-badge>
+            </template>
+            <div class="notify-panel">
+              <div class="notify-head">
+                <strong>站内通知</strong>
+                <el-button link type="primary" @click="markAllRead">全部已读</el-button>
+              </div>
+              <div v-loading="notifyLoading" class="notify-list">
+                <el-empty
+                  v-if="!notifications.length"
+                  description="暂无通知"
+                  :image-size="56"
+                />
+                <button
+                  v-for="item in notifications"
+                  :key="item.id"
+                  type="button"
+                  class="notify-item"
+                  :class="{ unread: !item.is_read }"
+                  @click="handleNotifyClick(item)"
+                >
+                  <div class="notify-title">{{ item.title }}</div>
+                  <div class="notify-content">{{ item.content || '点击查看详情' }}</div>
+                  <div class="notify-time">{{ item.created_at }}</div>
+                </button>
+              </div>
+            </div>
+          </el-popover>
+
           <el-dropdown trigger="click" @command="handleCommand">
             <span class="user-entry">
               <el-avatar :size="30" :src="auth.user?.avatar ?? undefined">
@@ -279,5 +395,59 @@ function handleCommand(command: string): void {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+.notify-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.notify-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.notify-list {
+  max-height: 360px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.notify-item {
+  text-align: left;
+  border: none;
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 10px;
+  cursor: pointer;
+}
+
+.notify-item.unread {
+  background: #eef5ff;
+}
+
+.notify-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.notify-content {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #606266;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notify-time {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #909399;
 }
 </style>

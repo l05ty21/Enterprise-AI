@@ -20,9 +20,8 @@ const form = reactive({
   password: '',
 })
 
-// 演示账号：课程演示用。上线给真实用户前把 SHOW_DEMO_ACCOUNT 改为 false 即可隐藏。
-// 测试效果更改
-const SHOW_DEMO_ACCOUNT = true
+// 演示账号：开发环境默认展示，生产构建由 VITE_SHOW_DEMO_ACCOUNT=false 关闭
+const SHOW_DEMO_ACCOUNT = String(import.meta.env.VITE_SHOW_DEMO_ACCOUNT ?? 'true') === 'true'
 const DEMO_ACCOUNT = {
   organization_code: 'demo',
   username: 'admin',
@@ -88,7 +87,7 @@ async function handleSubmit(): Promise<void> {
 
     <section class="login-panel">
       <div class="login-card">
-        <h2>欢迎回来12332132</h2>
+        <h2>欢迎回来</h2>
         <p class="login-tip">请使用企业账号登录管理后台</p>
 
         <el-form

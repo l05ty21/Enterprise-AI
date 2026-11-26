@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 
 import { resolveErrorMessage } from '@/api/client'
@@ -7,6 +8,11 @@ import { authApi } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
+const route = useRoute()
+const router = useRouter()
+const forcePassword = computed(
+  () => auth.user?.must_change_password || route.query.force_password === '1',
+)
 
 const profileRef = ref<FormInstance>()
 const passwordRef = ref<FormInstance>()
@@ -93,16 +99,22 @@ async function changePassword(): Promise<void> {
   }
   savingPassword.value = true
   try {
+    const wasForced = Boolean(forcePassword.value)
     await authApi.changePassword({
       old_password: passwordForm.old_password,
       new_password: passwordForm.new_password,
     })
-    ElMessage.success('密码已修改，请使用新密码重新登录')
     passwordForm.old_password = ''
     passwordForm.new_password = ''
     passwordForm.confirm_password = ''
-    await auth.logout()
-    window.location.assign('/login')
+    passwordRef.value.resetFields()
+    await auth.fetchMe()
+    if (wasForced) {
+      ElMessage.success('密码已修改，可以继续使用系统')
+      await router.replace('/dashboard')
+    } else {
+      ElMessage.success('密码已修改')
+    }
   } catch (error) {
     ElMessage.error(resolveErrorMessage(error, '修改密码失败'))
   } finally {
@@ -113,6 +125,15 @@ async function changePassword(): Promise<void> {
 
 <template>
   <div class="page-container">
+    <el-alert
+      v-if="forcePassword"
+      type="warning"
+      :closable="false"
+      show-icon
+      title="首次登录请先修改密码"
+      description="出于安全考虑，使用初始密码登录后必须修改密码，完成后即可正常使用系统。"
+      style="margin-bottom: 16px"
+    />
     <el-row :gutter="16">
       <el-col :xs="24" :md="10">
         <el-card shadow="never" header="账号信息">

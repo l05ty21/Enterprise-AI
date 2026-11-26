@@ -32,9 +32,16 @@ async def list_tickets(
     status_value: str | None = Query(default=None, alias="status"),
     priority: str | None = Query(default=None),
     mine: bool = Query(default=False, description="只看我提交或被指派的"),
+    assignee_me: bool = Query(
+        default=False, description="只看指派给我且未关闭的待办工单"
+    ),
 ) -> Page[TicketRead]:
     query = TicketQuery(
-        keyword=keyword, status=status_value, priority=priority, mine=mine
+        keyword=keyword,
+        status=status_value,
+        priority=priority,
+        mine=mine,
+        assignee_me=assignee_me,
     )
     return await TicketService(db).list_tickets(current, query, page)
 

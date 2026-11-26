@@ -48,6 +48,7 @@ class CurrentUserOut(BaseModel):
     department_id: int | None = None
     department_name: str | None = None
     is_superuser: bool = False
+    must_change_password: bool = False
     roles: list[RoleBrief] = Field(default_factory=list)
     permissions: list[str] = Field(default_factory=list)
 

@@ -35,8 +35,13 @@ class TicketRepository(BaseRepository[Ticket]):
             stmt = stmt.where(Ticket.status == query.status)
         if query.priority:
             stmt = stmt.where(Ticket.priority == query.priority)
+        if query.assignee_me:
+            stmt = stmt.where(
+                Ticket.assignee_id == user_id,
+                Ticket.status.in_(("pending", "processing", "resolved")),
+            )
         # 没有处理权限的人只能看到自己提的和指派给自己的
-        if query.mine or not see_all:
+        elif query.mine or not see_all:
             stmt = stmt.where(
                 or_(Ticket.creator_id == user_id, Ticket.assignee_id == user_id)
             )

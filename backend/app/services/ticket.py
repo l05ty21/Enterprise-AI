@@ -27,6 +27,8 @@ from app.schemas.ticket import (
     TicketRead,
     TicketUpdate,
 )
+from app.services.attachment import AttachmentService
+from app.services.notification import NotificationService
 
 # 允许的状态流转：处理人把工单往下推，创建人可以关闭自己的单子
 ALLOWED_TRANSITIONS: dict[str, set[str]] = {
@@ -115,6 +117,9 @@ class TicketService:
             | {h.operator_id for h in histories}
         )
         base = self._to_read(ticket, names)
+        attachments = await AttachmentService(self.session).list_briefs(
+            current.organization_id, "ticket", ticket.id
+        )
         return TicketDetail(
             **base.model_dump(),
             comments=[
@@ -139,6 +144,7 @@ class TicketService:
                 )
                 for h in histories
             ],
+            attachments=attachments,
         )
 
     # ------------------------------------------------------------------ 写入
@@ -187,7 +193,9 @@ class TicketService:
                 raise PermissionDenied("没有处理工单的权限")
 
         old_status = ticket.status
+        old_assignee = ticket.assignee_id
         remark = payload.remark
+        notify = NotificationService(self.session)
 
         if payload.assignee_id is not None:
             assignee = await self.users.get_in_org(
@@ -225,6 +233,22 @@ class TicketService:
                     remark=remark or "状态变更",
                 )
             )
+
+        if (
+            ticket.assignee_id
+            and ticket.assignee_id != old_assignee
+            and ticket.assignee_id != current.id
+        ):
+            await notify.notify(
+                organization_id=current.organization_id,
+                user_id=ticket.assignee_id,
+                title=f"工单已指派给你：{ticket.title}",
+                content=f"编号 {ticket.ticket_no}",
+                type="ticket_assigned",
+                link_type="ticket",
+                link_id=ticket.id,
+            )
+
         await self.session.commit()
         return await self.get_detail(current, ticket.id)
 
@@ -236,6 +260,20 @@ class TicketService:
             ticket_id=ticket.id, user_id=current.id, content=payload.content.strip()
         )
         await self.comments.add(comment)
+
+        notify = NotificationService(self.session)
+        recipients = {ticket.creator_id, ticket.assignee_id or 0} - {current.id, 0}
+        for uid in recipients:
+            await notify.notify(
+                organization_id=current.organization_id,
+                user_id=uid,
+                title=f"工单有新评论：{ticket.title}",
+                content=payload.content.strip()[:200],
+                type="ticket_comment",
+                link_type="ticket",
+                link_id=ticket.id,
+            )
+
         await self.session.commit()
         await self.session.refresh(comment)
         names = await self._names({current.id})

@@ -34,9 +34,19 @@ export interface TicketHistoryItem {
   created_at: string | null
 }
 
+export interface TicketAttachment {
+  id: number
+  filename: string
+  file_size: number
+  content_type: string | null
+  uploader_name: string | null
+  created_at: string | null
+}
+
 export interface TicketDetail extends Ticket {
   comments: TicketCommentItem[]
   histories: TicketHistoryItem[]
+  attachments: TicketAttachment[]
 }
 
 export interface TicketCreatePayload {
@@ -59,4 +69,5 @@ export interface TicketListQuery {
   status?: TicketStatus | ''
   priority?: TicketPriority | ''
   mine?: boolean
+  assignee_me?: boolean
 }

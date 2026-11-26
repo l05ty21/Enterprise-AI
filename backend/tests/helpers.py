@@ -54,6 +54,7 @@ async def _create_user(
         real_name=real_name,
         email=f"{username}@example.com",
         status=1,
+        must_change_password=0,
     )
     session.add(user)
     await session.flush()

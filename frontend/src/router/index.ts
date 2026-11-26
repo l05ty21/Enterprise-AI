@@ -130,6 +130,10 @@ router.beforeEach(async (to) => {
     }
   }
 
+  if (auth.user?.must_change_password && to.path !== '/profile') {
+    return { path: '/profile', query: { force_password: '1' } }
+  }
+
   if (to.meta.permission && !auth.has(to.meta.permission)) {
     return { path: '/403' }
   }

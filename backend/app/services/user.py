@@ -99,6 +99,7 @@ class UserService:
             phone=payload.phone,
             avatar=payload.avatar,
             status=payload.status,
+            must_change_password=1,
         )
         await self.users.add(user)
         if payload.role_ids:
