@@ -87,7 +87,7 @@ async function handleSubmit(): Promise<void> {
 
     <section class="login-panel">
       <div class="login-card">
-        <h2>欢迎回来123123</h2>
+        <h2>欢迎回来</h2>
         <p class="login-tip">请使用企业账号登录管理后台</p>
 
         <el-form
