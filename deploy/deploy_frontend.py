@@ -74,8 +74,8 @@ def build_env() -> dict[str, str]:
     tmp_dir.mkdir(exist_ok=True)
     env["TMP"] = str(tmp_dir)
     env["TEMP"] = str(tmp_dir)
-    # 生产构建默认隐藏登录页演示账号；本地开发仍可读 frontend/.env
-    env.setdefault("VITE_SHOW_DEMO_ACCOUNT", "false")
+    # 领导演示期间展示登录页演示账号；正式对外可改回 false
+    env.setdefault("VITE_SHOW_DEMO_ACCOUNT", "true")
     return env
 
 

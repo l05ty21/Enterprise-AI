@@ -22,7 +22,7 @@ jobs:
       - name: Build frontend
         working-directory: frontend
         env:
-          VITE_SHOW_DEMO_ACCOUNT: "false"
+          VITE_SHOW_DEMO_ACCOUNT: "true"
         run: |
           npm ci --no-audit --no-fund
           npm run build
