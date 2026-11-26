@@ -213,6 +213,13 @@ python deploy/deploy_frontend.py
 5. `flock` 防止定时器在上一次未结束时重复触发
 6. 全部过程写入 `/var/log/ea-deploy.log`
 
+> 两个容易踩的坑：
+> ① 新表迁移里的外键列必须和老表主键同类型。本项目主键是 `BIGINT UNSIGNED`，
+>    迁移里写成 `sa.BigInteger()`（有符号）会让后端一启动就报 `3780` 并进入重启循环，
+>    健康检查失败后自动回滚。正确写法见 `backend/app/db/types.py` 的 `bigint_unsigned()`。
+> ② MySQL 的 DDL 不走事务，迁移中途失败可能留下半张表；重跑前先确认
+>    `attachments` 这类新表是不是已经建出来了，否则会卡在 `table already exists`。
+
 安装（服务器上执行一次）：
 
 ```bash
@@ -297,6 +304,8 @@ python deploy/deploy_frontend.py --skip-build    # 只上传现有 dist
 | 上传文档报 `Free quota exhausted` / `AllocationQuota.FreeTierOnly` | 百炼账号处于「仅用免费额度」模式且向量化额度已用尽（对话额度是分开计的） | 控制台充值或关闭「仅使用免费额度」；也可换用其它厂商的 embedding（如硅基流动的 `BAAI/bge-m3`） |
 | 上传文档报「还没有可用的【向量】模型配置」 | 只在「AI 模型」里配了对话模型，没有配 `model_type=embedding` 的向量模型 | 在「系统设置 → AI 模型」新增一条类型为「向量（Embedding）」的配置，如 `text-embedding-v3` |
 | 知识库检索结果为空 | 相似度低于 `RAG_MIN_SCORE`（默认 0.2）被过滤 | 调低 `.env` 的 `RAG_MIN_SCORE`，或检查文档是否真的已 `ready` |
+| 后端 `Restarting`，日志报 `3780 ... are incompatible` | 新表外键列是 `BIGINT`（有符号），老表主键是 `BIGINT UNSIGNED` | 迁移里改用 `mysql.BIGINT(unsigned=True)`，与 `bigint_unsigned()` 保持一致 |
+| 自动部署一次跑十几分钟不结束 | 健康检查的 `curl` 没有超时，nginx 返回 504 时每次都要等满 60 秒 | 已加 `-m 5`；卡住时先 `systemctl stop ea-deploy.service` 再排查 |
 
 ---
 
