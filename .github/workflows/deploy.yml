@@ -1,0 +1,65 @@
+name: Deploy to Aliyun
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        working-directory: frontend
+        env:
+          VITE_SHOW_DEMO_ACCOUNT: "false"
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+          tar -czf ../fe-dist.tar.gz -C dist .
+
+      - name: Upload frontend
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          source: fe-dist.tar.gz
+          target: /tmp/
+
+      - name: Remote deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            set -e
+            HTML=/opt/enterprise-ai/deploy/html
+            mkdir -p "$HTML"
+            tar -xzf /tmp/fe-dist.tar.gz -C "$HTML"
+            rm -f /tmp/fe-dist.tar.gz
+
+            # 服务器仍从 Gitee(origin) 拉代码时：请同时 push 到 Gitee
+            # 若已把 origin 改成 GitHub，则 deploy.sh 会直接拉到本次提交
+            if [ -x /opt/enterprise-ai/deploy/deploy.sh ]; then
+              /opt/enterprise-ai/deploy/deploy.sh
+            else
+              echo "deploy.sh 不存在或不可执行"
+              exit 1
+            fi
+
+            curl -fsS http://127.0.0.1/api/v1/health
+            echo "deploy ok"
