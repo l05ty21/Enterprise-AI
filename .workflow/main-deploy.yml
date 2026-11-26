@@ -1,0 +1,90 @@
+version: '1.0'
+# 流水线唯一标识：同一仓库内不可重复
+name: main-deploy
+displayName: 主干发布（前端云端构建 → 阿里云部署）
+
+# 只有 main 的 push 才触发；PR 和别的分支不跑，省构建时长
+triggers:
+  push:
+    branches:
+      precise:
+        - main
+
+stages:
+  # ---------- 阶段 1：云端构建前端 ----------
+  # 1 GiB 的服务器跑不动 vite build，所以把这一步搬到 Gitee Go 的构建机
+  - stage:
+      name: build
+      displayName: 构建
+      strategy: naturally
+      trigger: auto
+      steps:
+        - step: build@nodejs
+          name: build_frontend
+          displayName: 前端构建（Node + Vite）
+          # 版本以下拉框实际可选项为准；若报「版本不存在」，在流水线编辑页改选 22.x 即可
+          nodeVersion: 22.14.0
+          commands:
+            - node -v && npm -v
+            - npm config set registry https://registry.npmmirror.com
+            - cd frontend && npm ci --no-audit --no-fund && VITE_SHOW_DEMO_ACCOUNT=false npm run build
+            - du -sh frontend/dist && ls frontend/dist
+          artifacts:
+            # 产物名会被下游引用，只用字母/数字/下划线（带 - 或 . 会被 shell 解析吞掉）
+            - name: BUILD_ARTIFACT
+              path:
+                - ./frontend/dist
+
+  # ---------- 阶段 2：下发到服务器并部署 ----------
+  - stage:
+      name: deploy
+      displayName: 部署
+      strategy: naturally
+      trigger: auto
+      steps:
+        - step: deploy@agent
+          name: deploy_frontend
+          displayName: 发布到阿里云服务器
+          # 必须与 Gitee「主机管理」里创建的主机组 ID 一致
+          hostGroupID: ea-aliyun
+          deployArtifact:
+            - source: build
+              name: output
+              target: ~/gitee_go/deploy
+              dependArtifact: BUILD_ARTIFACT
+          script: |
+            set -e
+            echo "执行用户: $(whoami)"
+            echo "=== 1. 解包制品 ==="
+            cd ~/gitee_go/deploy
+            ls -lh
+            rm -rf /tmp/ea-fe
+            mkdir -p /tmp/ea-fe
+            tar -zxf output.tar.gz -C /tmp/ea-fe
+            INDEX=$(find /tmp/ea-fe -maxdepth 3 -name index.html | head -1)
+            if [ -z "$INDEX" ]; then
+              echo "!! 制品里没有 index.html，构建产物路径可能不对"
+              exit 1
+            fi
+            SRC=$(dirname "$INDEX")
+            echo "前端产物目录: $SRC"
+            du -sh "$SRC"
+
+            echo "=== 2. 覆盖 nginx 静态目录（先铺 hash 资源，再原子替换 index.html）==="
+            HTML=/opt/enterprise-ai/deploy/html
+            mkdir -p "$HTML/assets"
+            cp -a "$SRC/assets/." "$HTML/assets/"
+            cp -f "$SRC/index.html" "$HTML/index.html.new"
+            mv -f "$HTML/index.html.new" "$HTML/index.html"
+            if [ -f "$SRC/favicon.svg" ]; then cp -f "$SRC/favicon.svg" "$HTML/"; fi
+            find "$HTML/assets" -type f -mtime +7 -delete
+            echo "线上入口: $(grep -o 'assets/index-[^"]*' "$HTML/index.html" | head -1)"
+
+            echo "=== 3. 同步代码并重建后端（无后端改动会自动跳过）==="
+            cd /opt/enterprise-ai
+            bash deploy/deploy.sh
+
+            echo "=== 4. 校验 ==="
+            curl -fsS -m 5 http://127.0.0.1/api/v1/health
+            echo
+            curl -s -o /dev/null -w 'SITE_HTTP=%{http_code}\n' http://127.0.0.1/
