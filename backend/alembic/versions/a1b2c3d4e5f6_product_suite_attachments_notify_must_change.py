@@ -11,6 +11,7 @@ from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import mysql
 
 revision: str = "a1b2c3d4e5f6"
 down_revision: Union[str, None] = "f30e28d12d78"
@@ -21,15 +22,15 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     op.create_table(
         "attachments",
-        sa.Column("id", sa.BigInteger().with_variant(sa.Integer(), "sqlite"), autoincrement=True, nullable=False),
-        sa.Column("organization_id", sa.BigInteger().with_variant(sa.Integer(), "sqlite"), nullable=False),
+        sa.Column("id", mysql.BIGINT(unsigned=True).with_variant(sa.Integer(), "sqlite"), autoincrement=True, nullable=False),
+        sa.Column("organization_id", mysql.BIGINT(unsigned=True).with_variant(sa.Integer(), "sqlite"), nullable=False),
         sa.Column("biz_type", sa.String(length=32), nullable=False),
-        sa.Column("biz_id", sa.BigInteger().with_variant(sa.Integer(), "sqlite"), nullable=False),
+        sa.Column("biz_id", mysql.BIGINT(unsigned=True).with_variant(sa.Integer(), "sqlite"), nullable=False),
         sa.Column("filename", sa.String(length=255), nullable=False),
         sa.Column("file_path", sa.String(length=512), nullable=False),
-        sa.Column("file_size", sa.BigInteger().with_variant(sa.Integer(), "sqlite"), server_default="0", nullable=False),
+        sa.Column("file_size", mysql.BIGINT(unsigned=True).with_variant(sa.Integer(), "sqlite"), server_default="0", nullable=False),
         sa.Column("content_type", sa.String(length=128), nullable=True),
-        sa.Column("uploader_id", sa.BigInteger().with_variant(sa.Integer(), "sqlite"), nullable=False),
+        sa.Column("uploader_id", mysql.BIGINT(unsigned=True).with_variant(sa.Integer(), "sqlite"), nullable=False),
         sa.Column("created_at", sa.DateTime(), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
         sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], name=op.f("fk_attachments_organization_id_organizations")),
         sa.ForeignKeyConstraint(["uploader_id"], ["users.id"], name=op.f("fk_attachments_uploader_id_users")),
@@ -47,7 +48,7 @@ def upgrade() -> None:
         batch_op.add_column(
             sa.Column(
                 "link_id",
-                sa.BigInteger().with_variant(sa.Integer(), "sqlite"),
+                mysql.BIGINT(unsigned=True).with_variant(sa.Integer(), "sqlite"),
                 nullable=True,
             )
         )

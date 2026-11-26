@@ -110,7 +110,7 @@ log "启动容器"
 if compose up -d >>"$LOG" 2>&1; then
   for _ in $(seq 1 20); do
     sleep 3
-    if curl -fsS "$HEALTH_URL" >/dev/null 2>&1; then
+    if curl -fsS -m 5 "$HEALTH_URL" >/dev/null 2>&1; then
       log "部署成功，当前版本 ${NEW:0:7}"
       exit 0
     fi
