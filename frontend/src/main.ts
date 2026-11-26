@@ -1,3 +1,4 @@
+// 发布链路自检：pre-push 钩子会在 push 前构建并上传前端
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'
