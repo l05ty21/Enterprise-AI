@@ -111,15 +111,19 @@ def make_tarball() -> Path:
 
 
 def connect() -> paramiko.SSHClient:
-    if not PASS:
-        raise SystemExit("请先设置环境变量 ECS_PASS")
+    # 优先用免密钥（~/.ssh/ea_deploy），没有文件时退回密码
+    key_path = os.environ.get("ECS_KEY") or Path.home() / ".ssh" / "ea_deploy"
+    use_key = Path(key_path).is_file()
+    if not use_key and not PASS:
+        raise SystemExit("没有找到 ~/.ssh/ea_deploy，也没有设置 ECS_PASS")
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     client.connect(
         HOST,
         22,
         USER,
-        PASS,
+        password=PASS or None,
+        key_filename=str(key_path) if use_key else None,
         timeout=25,
         banner_timeout=25,
         auth_timeout=25,

@@ -1,0 +1,22 @@
+#!/bin/sh
+# push 之前自动发布前端：frontend/ 有改动才跑，避免“代码推上去了但页面没变”。
+# 启用方式（本仓库执行一次）：
+#   git config core.hooksPath .githooks
+set -e
+
+UPSTREAM=$(git rev-parse --verify origin/main 2>/dev/null || true)
+if [ -z "$UPSTREAM" ]; then
+    exit 0
+fi
+
+CHANGED=$(git diff --name-only "$UPSTREAM" HEAD -- frontend | head -1)
+if [ -z "$CHANGED" ]; then
+    exit 0
+fi
+
+echo "[pre-push] 检测到 frontend/ 改动，开始本地构建并上传（约 1 分钟）..."
+if ! python deploy/deploy_frontend.py; then
+    echo "[pre-push] 前端发布失败，已阻止本次 push"
+    exit 1
+fi
+echo "[pre-push] 前端已发布，继续 push"
