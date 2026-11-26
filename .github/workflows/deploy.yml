@@ -28,38 +28,57 @@ jobs:
           npm run build
           tar -czf ../fe-dist.tar.gz -C dist .
 
+      # Windows 粘贴私钥容易丢换行，导致 appleboy 报「未找到密钥」。
+      # Secret SSH_PRIVATE_KEY 请改成私钥文件的 Base64（一行），这里再解码。
+      - name: Setup SSH key
+        env:
+          SSH_PRIVATE_KEY_B64: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT || 22 }}
+        run: |
+          set -e
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s' "$SSH_PRIVATE_KEY_B64" | tr -d '\r\n ' | base64 -d > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keygen -y -f ~/.ssh/deploy_key >/dev/null
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
       - name: Upload frontend
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SSH_PORT || 22 }}
-          source: fe-dist.tar.gz
-          target: /tmp/
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT || 22 }}
+        run: |
+          set -e
+          scp -i ~/.ssh/deploy_key -P "$SSH_PORT" \
+            -o IdentitiesOnly=yes \
+            fe-dist.tar.gz \
+            "${SSH_USER}@${SSH_HOST}:/tmp/fe-dist.tar.gz"
 
       - name: Remote deploy
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SSH_PORT || 22 }}
-          script: |
-            set -e
-            HTML=/opt/enterprise-ai/deploy/html
-            mkdir -p "$HTML"
-            tar -xzf /tmp/fe-dist.tar.gz -C "$HTML"
-            rm -f /tmp/fe-dist.tar.gz
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT || 22 }}
+        run: |
+          set -e
+          ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" \
+            -o IdentitiesOnly=yes \
+            "${SSH_USER}@${SSH_HOST}" bash -s <<'EOF'
+          set -e
+          HTML=/opt/enterprise-ai/deploy/html
+          mkdir -p "$HTML"
+          tar -xzf /tmp/fe-dist.tar.gz -C "$HTML"
+          rm -f /tmp/fe-dist.tar.gz
 
-            # 服务器仍从 Gitee(origin) 拉代码时：请同时 push 到 Gitee
-            # 若已把 origin 改成 GitHub，则 deploy.sh 会直接拉到本次提交
-            if [ -x /opt/enterprise-ai/deploy/deploy.sh ]; then
-              /opt/enterprise-ai/deploy/deploy.sh
-            else
-              echo "deploy.sh 不存在或不可执行"
-              exit 1
-            fi
+          if [ -x /opt/enterprise-ai/deploy/deploy.sh ]; then
+            /opt/enterprise-ai/deploy/deploy.sh
+          else
+            echo "deploy.sh 不存在或不可执行"
+            exit 1
+          fi
 
-            curl -fsS http://127.0.0.1/api/v1/health
-            echo "deploy ok"
+          curl -fsS http://127.0.0.1/api/v1/health
+          echo "deploy ok"
+          EOF
