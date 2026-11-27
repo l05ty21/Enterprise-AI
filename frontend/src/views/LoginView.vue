@@ -74,7 +74,7 @@ async function handleSubmit(): Promise<void> {
     <section class="login-brand">
       <div class="brand-inner">
         <div class="brand-logo">智</div>
-        <h1>智企协同更改</h1>
+        <h1>智企协同</h1>
         <p class="brand-subtitle">Enterprise AI · 企业级 AI SaaS 平台</p>
         <ul class="brand-points">
           <li>统一身份与 RBAC 权限，多企业数据隔离</li>
