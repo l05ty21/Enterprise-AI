@@ -1,7 +1,9 @@
 # 智企协同：GitHub Actions 自动部署教学手册（含填写说明与排错）
 
-面向：**教别人从零搭一套「推代码 → 自动部署到阿里云」**。  
+面向：**教别人从零搭一套「推代码 → 部署到阿里云」**。  
 文中用「**【填】**」标出每个界面/命令里该填什么；用「**【本项目示例】**」给出当前仓库的真实值，别人照抄时请改成自己的。
+
+**先看第 2 节：** [手动部署与自动部署流程对照](#2-手动部署与自动部署流程完整对照)。
 
 ---
 
@@ -35,7 +37,7 @@
 
 ---
 
-## 1. 先讲清楚整体在干什么（给学生听）
+## 1. 先讲清楚整体在干什么
 
 ```
 本机改代码
@@ -63,7 +65,159 @@
 
 ---
 
-## 2. 第一步：在 GitHub 新建空仓库（网页上填什么）
+## 2. 手动部署与自动部署流程（完整对照）
+
+本项目有两套上线方式，**推荐日常用自动部署**；GitHub 网络不通或演示「手工发版」时用手动部署。
+
+### 2.1 怎么选
+
+| 方式 | 什么时候用 | 你要做什么 |
+| --- | --- | --- |
+| **自动部署** | 日常发版（推荐） | 本机 `git push` 两次 → 看 Actions 绿勾 |
+| **手动部署** | GitHub 推不上、或给老师演示手工流程 | 本机推 Gitee + 传前端 + 服务器跑脚本 |
+| **定时器轮询**（旧） | 仅对比演示 | `ea-deploy.timer` 每 2 分钟拉 Gitee；**平时应关闭**，避免和 Actions 冲突 |
+
+---
+
+### 2.2 自动部署流程（GitHub Actions）
+
+```
+本机改代码
+   → git push github main          【触发 Actions】
+   → git push origin main          【同步 Gitee，供服务器拉代码】
+        ↓
+GitHub Actions（云端自动）
+   ① 拉取仓库代码
+   ② npm ci + npm run build（构建前端）
+   ③ 用 Secrets 里的 SSH 密钥登录服务器
+   ④ scp 上传前端到 /opt/enterprise-ai/deploy/html
+   ⑤ ssh 执行 /opt/enterprise-ai/deploy/deploy.sh
+        ├─ git fetch Gitee
+        ├─ 有后端变更 → docker compose build backend + up
+        └─ 健康检查 /api/v1/health（失败则回滚）
+        ↓
+浏览器打开 http://你的服务器IP ，Ctrl+F5 强刷验证
+```
+
+**本机要敲的命令：**
+
+```powershell
+cd "D:\专高五前两个月\项目\专高六第一周个人项目"
+
+git add .
+git commit -m "说明改了什么"
+git push github main    # 触发自动部署
+git push origin main    # 同步 Gitee
+```
+
+**然后：** 打开 https://github.com/l05ty21/Enterprise-AI/actions  
+看 **「部署至阿里云」** 是否绿勾。一般**不用**再点「运行」按钮。
+
+**流水线文件：** `.github/workflows/deploy.yml`  
+**服务器脚本（被 Actions 调用）：** `deploy/deploy.sh`
+
+---
+
+### 2.3 手动部署流程（不依赖 Actions）
+
+一句话：**推 Gitee → 本机传前端 → 服务器跑 deploy.sh**。
+
+```
+① 本机：git push origin main（推到 Gitee）
+② 本机：python deploy/deploy_frontend.py（构建并上传前端）
+③ 服务器：sudo /opt/enterprise-ai/deploy/deploy.sh（拉代码 + 重启后端）
+④ 浏览器强刷验证
+```
+
+#### 步骤 ① 本机提交并推到 Gitee
+
+```powershell
+cd "D:\专高五前两个月\项目\专高六第一周个人项目"
+
+git add .
+git commit -m "说明改了什么"
+git push origin main
+```
+
+#### 步骤 ② 本机构建前端并上传到服务器
+
+> 不要在 1G 服务器上执行 `npm run build`。
+
+```powershell
+$env:ECS_PASS='你的服务器密码'
+# 可选：$env:ECS_HOST='59.110.239.98'
+
+python deploy/deploy_frontend.py
+```
+
+脚本会：本机 `npm run build` → 打包上传 → 解压到服务器 `/opt/enterprise-ai/deploy/html`。
+
+若本地已经 build 过、只想再传一次：
+
+```powershell
+python deploy/deploy_frontend.py --skip-build
+```
+
+#### 步骤 ③ 服务器拉代码并部署后端
+
+SSH 登录阿里云后：
+
+```bash
+sudo /opt/enterprise-ai/deploy/deploy.sh
+```
+
+等价于：从 Gitee 拉最新代码 → 按需重建后端容器 → 健康检查。
+
+若需要逐步手动（排错时）：
+
+```bash
+cd /opt/enterprise-ai
+sudo git fetch origin main
+sudo git reset --hard origin/main
+cd deploy
+sudo docker compose -f docker-compose.app.yml build backend
+sudo docker compose -f docker-compose.app.yml up -d
+curl -s http://127.0.0.1/api/v1/health
+```
+
+有数据库迁移时再执行（按线上习惯）：
+
+```bash
+sudo docker compose -f docker-compose.app.yml exec backend alembic upgrade head
+```
+
+#### 步骤 ④ 验证
+
+1. 浏览器打开 `http://59.110.239.98`，Ctrl+F5  
+2. 服务器：`curl -s http://127.0.0.1/api/v1/health`  
+3. 可选：`sudo tail -n 40 /var/log/ea-deploy.log`
+
+---
+
+### 2.4 两种方式对照表
+
+| 步骤 | 自动部署 | 手动部署 |
+| --- | --- | --- |
+| 推代码 | `push github` + `push origin` | 至少 `push origin` |
+| 构建前端 | Actions 云端构建 | 本机 `deploy_frontend.py` |
+| 上传前端 | Actions `scp` 自动上传 | 同上脚本自动上传 |
+| 更新后端 | Actions SSH 调 `deploy.sh` | 你自己在服务器执行 `deploy.sh` |
+| 看结果 | GitHub Actions 绿勾 | 浏览器 + `curl` 健康检查 |
+| 适用 | 日常、演示 CI/CD | 网络不稳、教学「手工发版」 |
+
+---
+
+### 2.5 改动范围速查
+
+| 你改了什么 | 自动部署怎么做 | 手动部署怎么做 |
+| --- | --- | --- |
+| 只改前端 | 双 push，等 Actions | `push origin` + `deploy_frontend.py` |
+| 只改后端 | 双 push，等 Actions | `push origin` + 服务器 `deploy.sh` |
+| 前后端都改 | 双 push，等 Actions | `push origin` + `deploy_frontend.py` + `deploy.sh` |
+
+---
+
+## 3. 第一步：在 GitHub 新建空仓库（网页上填什么）
 
 打开：https://github.com/new
 
@@ -81,7 +235,7 @@
 
 ---
 
-## 3. 第二步：本机关联 GitHub 并推送（终端填什么）
+## 4. 第二步：本机关联 GitHub 并推送（终端填什么）
 
 在**本机**打开 PowerShell（不是阿里云网页终端）：
 
@@ -112,9 +266,9 @@ git push -u github main
 
 ---
 
-## 4. 第三步：生成部署用 SSH 密钥（本机）
+## 5. 第三步：生成部署用 SSH 密钥（本机）
 
-### 4.1 生成命令（一般不用改）
+### 5.1 生成命令（一般不用改）
 
 ```powershell
 ssh-keygen -t ed25519 -C "github-actions" -f $env:USERPROFILE\.ssh\gha_deploy -N '""'
@@ -133,7 +287,7 @@ ssh-keygen -t ed25519 -C "github-actions" -f $env:USERPROFILE\.ssh\gha_deploy -N
 | `C:\Users\你的用户名\.ssh\gha_deploy` | **私钥** | 只给 GitHub Secret（先转 Base64） |
 | `C:\Users\你的用户名\.ssh\gha_deploy.pub` | **公钥** | 放到服务器 `authorized_keys` |
 
-### 4.2 把公钥装到服务器
+### 5.2 把公钥装到服务器
 
 ```powershell
 # 【填】root → 你的 SSH 用户；IP → 你的公网 IP
@@ -142,7 +296,7 @@ type $env:USERPROFILE\.ssh\gha_deploy.pub | ssh root@59.110.239.98 "mkdir -p ~/.
 
 出现 `password:` 时：**盲打**服务器密码后回车（屏幕不会显示 `*`，这是正常的）。
 
-### 4.3 测试免密是否成功
+### 5.3 测试免密是否成功
 
 ```powershell
 # 【填】用户和 IP
@@ -154,9 +308,9 @@ ssh -i $env:USERPROFILE\.ssh\gha_deploy root@59.110.239.98
 
 ---
 
-## 5. 第四步：GitHub Secrets（网页上「这里填什么」）
+## 6. 第四步：GitHub Secrets（网页上「这里填什么」）
 
-### 5.1 打开哪里
+### 6.1 打开哪里
 
 浏览器打开（【填】用户名和仓库名）：
 
@@ -168,7 +322,7 @@ ssh -i $env:USERPROFILE\.ssh\gha_deploy root@59.110.239.98
 
 ---
 
-### 5.2 第 1 个 Secret：`SSH_HOST`
+### 6.2 第 1 个 Secret：`SSH_HOST`
 
 | 框 | 【填】什么 | 【本项目示例】 | 错例 |
 | --- | --- | --- | --- |
@@ -179,7 +333,7 @@ ssh -i $env:USERPROFILE\.ssh\gha_deploy root@59.110.239.98
 
 ---
 
-### 5.3 第 2 个 Secret：`SSH_USER`
+### 6.3 第 2 个 Secret：`SSH_USER`
 
 | 框 | 【填】什么 | 【本项目示例】 | 说明 |
 | --- | --- | --- | --- |
@@ -188,7 +342,7 @@ ssh -i $env:USERPROFILE\.ssh\gha_deploy root@59.110.239.98
 
 ---
 
-### 5.4 第 3 个 Secret：`SSH_PRIVATE_KEY`（最容易填错）
+### 6.4 第 3 个 Secret：`SSH_PRIVATE_KEY`（最容易填错）
 
 **不要**直接粘贴私钥原文（Windows 容易丢换行，Actions 会报「未找到密钥」）。  
 **要**粘贴私钥文件的 **Base64 一整行**。
@@ -226,7 +380,7 @@ SSH_USER
 
 ---
 
-## 6. 第五步：流水线文件里有什么（一般不用改填写项）
+## 7. 第五步：流水线文件里有什么（一般不用改填写项）
 
 文件位置：项目里的 `.github/workflows/deploy.yml`
 
@@ -243,11 +397,11 @@ SSH_USER
 
 ---
 
-## 7. 第六步：服务器上要执行的命令（【填】哪里）
+## 8. 第六步：服务器上要执行的命令（【填】哪里）
 
 用阿里云「远程连接」或本机 SSH 登录服务器。若是 `admin` 用户，记得加 `sudo`。
 
-### 7.1 关掉旧的定时自动部署（避免和 Actions 抢）
+### 8.1 关掉旧的定时自动部署（避免和 Actions 抢）
 
 ```bash
 sudo systemctl disable --now ea-deploy.timer
@@ -257,7 +411,7 @@ systemctl is-active ea-deploy.timer
 
 期望大致：`disabled` + `inactive`。
 
-### 7.2 确认服务器从 Gitee 拉代码
+### 8.2 确认服务器从 Gitee 拉代码
 
 ```bash
 cd /opt/enterprise-ai
@@ -273,7 +427,7 @@ sudo git fetch origin main
 
 ---
 
-## 8. 日常发版（教别人反复练的四步）
+## 9. 日常发版（教别人反复练的四步）
 
 **在本机终端执行**（路径【填】成学员自己的）：
 
@@ -303,7 +457,7 @@ https://github.com/l05ty21/Enterprise-AI/actions
 
 ---
 
-## 9. 登录页演示账号（演示时填什么）
+## 10. 登录页演示账号（演示时填什么）
 
 登录页展示（`frontend/src/views/LoginView.vue`）：
 
@@ -319,9 +473,9 @@ https://github.com/l05ty21/Enterprise-AI/actions
 
 ---
 
-## 10. 常见错误：现象 → 原因 → 怎么填/怎么敲
+## 11. 常见错误：现象 → 原因 → 怎么填/怎么敲
 
-### 10.1 推 GitHub：`Connection was reset`
+### 11.1 推 GitHub：`Connection was reset`
 
 **原因：** 网络到 GitHub 不稳。
 
@@ -352,7 +506,7 @@ git push github main
 
 ---
 
-### 10.2 `non-fast-forward` / rejected
+### 11.2 `non-fast-forward` / rejected
 
 **原因：** 远程比你新，或历史分叉。
 
@@ -371,7 +525,7 @@ git push github main
 
 ---
 
-### 10.3 Actions 红叉：`ssh: 未找到密钥` / 无法认证
+### 11.3 Actions 红叉：`ssh: 未找到密钥` / 无法认证
 
 **原因：** `SSH_PRIVATE_KEY` 填错了。
 
@@ -381,11 +535,11 @@ git push github main
 | `gha_deploy.pub` 公钥内容 | 私钥的 Base64 |
 | 带换行的 `BEGIN OPENSSH PRIVATE KEY` 原文 | Base64（本流水线按 Base64 解码） |
 
-按 **第 5.4 节** 重新生成 Base64 → 编辑 Secret → Actions 里 **Re-run all jobs**。
+按 **第 6.4 节** 重新生成 Base64 → 编辑 Secret → Actions 里 **Re-run all jobs**。
 
 ---
 
-### 10.4 VS Code 左上角一直「同步更改」，一点就弹 Connection was reset
+### 11.4 VS Code 左上角一直「同步更改」，一点就弹 Connection was reset
 
 **原因：** 同步按钮默认对的是 GitHub；GitHub 推失败，数字消不掉。
 
@@ -393,7 +547,7 @@ git push github main
 
 ---
 
-### 10.5 服务器 `Permission denied`
+### 11.5 服务器 `Permission denied`
 
 **原因：** `admin` 改不了 root 的目录。
 
@@ -404,7 +558,7 @@ sudo git fetch origin main
 
 ---
 
-### 10.6 服务器拉 GitHub 卡住 / `curl 52` / timed out
+### 11.6 服务器拉 GitHub 卡住 / `curl 52` / timed out
 
 **原因：** 服务器到不了 GitHub。
 
@@ -412,14 +566,14 @@ sudo git fetch origin main
 
 ---
 
-### 10.7 Linux 提示 Password 却「输入不进去」
+### 11.7 Linux 提示 Password 却「输入不进去」
 
 **不是键盘坏了。** 密码输入默认不回显。盲打完回车。  
 权限不够时用：`sudo 命令`。
 
 ---
 
-### 10.8 只推了 GitHub、没推 Gitee
+### 11.8 只推了 GitHub、没推 Gitee
 
 前端可能已更新，后端代码服务器拉不到最新。  
 **口诀：两个都推。**
@@ -431,13 +585,13 @@ git push origin main
 
 ---
 
-### 10.9 Actions 黄色提示 Node.js 20 deprecated
+### 11.9 Actions 黄色提示 Node.js 20 deprecated
 
 **可忽略。** 真正失败看红叉步骤日志。
 
 ---
 
-## 11. 备用方案：GitHub 推不上去时怎么上线
+## 12. 备用方案：GitHub 推不上去时怎么上线
 
 本机：
 
@@ -455,7 +609,7 @@ python deploy/deploy_frontend.py
 
 ---
 
-## 12. 验收清单（教完让对方自己勾）
+## 13. 验收清单（教完让对方自己勾）
 
 - [ ] GitHub 空仓已建，且未勾选 README  
 - [ ] `git remote -v` 能看到 `github` → GitHub，`origin` → Gitee  
@@ -470,13 +624,13 @@ python deploy/deploy_frontend.py
 
 ---
 
-## 13. 给别人讲的 30 秒版
+## 14. 给别人讲的 30 秒版
 
 「改完代码在本机 push 到 GitHub，Actions 自动构建前端并 SSH 部署到阿里云；同时 push 到 Gitee，服务器从 Gitee 拉后端。Secrets 里要填服务器 IP、SSH 用户、私钥的 Base64。服务器不要直连 GitHub，会超时。」
 
 ---
 
-## 14. 相关文件
+## 15. 相关文件
 
 | 文件 | 作用 |
 | --- | --- |

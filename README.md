@@ -121,7 +121,8 @@ cd backend
 - [数据库设计](docs/database.md)
 - [接口文档](docs/api.md)
 - [部署手册](docs/deploy.md) —— 阿里云 ECS 单机部署全流程
-- [GitHub Actions 自动部署与排错](docs/github-actions-deploy-guide.md) —— 日常发版流程、双远程推送、常见错误解决
+- [GitHub Actions 自动部署与排错](docs/github-actions-deploy-guide.md) —— 手动/自动部署流程对照、双远程推送、常见错误解决
+- [答辩讲解稿（八大板块）](docs/答辩讲解稿-八大板块.md) —— 简介/痛点/功能/架构/规划/CI-CD/商业化/Q&A
 - [后端说明](backend/README.md)
 - [前端说明](frontend/README.md)
 
